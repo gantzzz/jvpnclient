@@ -11,12 +11,13 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.RequiresApi;
+import androidx.appcompat.app.AppCompatActivity;
 
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Set;
 import java.util.stream.Collectors;
-public class JustVpnClient extends Activity {
+public class JustVpnClient extends AppCompatActivity{
     public interface Prefs {
         String NAME = "connection";
         String SERVER_ADDRESS = "server.address";
