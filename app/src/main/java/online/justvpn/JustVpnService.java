@@ -27,7 +27,8 @@ public class JustVpnService extends VpnService implements Handler.Callback {
     public static final String ACTION_CONNECT = "online.justvpn.START";
     public static final String ACTION_DISCONNECT = "online.justvpn.STOP";
     private Handler mHandler;
-    private static class Connection extends Pair<Thread, ParcelFileDescriptor> {
+    private static class Connection extends Pair<Thread, ParcelFileDescriptor>
+    {
         public Connection(Thread thread, ParcelFileDescriptor pfd) {
             super(thread, pfd);
         }
@@ -36,6 +37,7 @@ public class JustVpnService extends VpnService implements Handler.Callback {
     private final AtomicReference<Connection> mConnection = new AtomicReference<>();
     private AtomicInteger mNextConnectionId = new AtomicInteger(1);
     private PendingIntent mConfigureIntent;
+    private JustVpnConnection mJustVpnConnection;
     @Override
     public void onCreate() {
         // The handler is only used to show messages.
@@ -46,9 +48,11 @@ public class JustVpnService extends VpnService implements Handler.Callback {
         mConfigureIntent = PendingIntent.getActivity(this, 0, new Intent(this, JustVpnService.class),
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
     }
+    @RequiresApi(api = Build.VERSION_CODES.O)
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        if (intent != null && ACTION_DISCONNECT.equals(intent.getAction())) {
+        if (intent != null && ACTION_DISCONNECT.equals(intent.getAction()))
+        {
             disconnect();
             return START_NOT_STICKY;
         } else {
@@ -60,6 +64,7 @@ public class JustVpnService extends VpnService implements Handler.Callback {
     public void onDestroy() {
         disconnect();
     }
+    @RequiresApi(api = Build.VERSION_CODES.O)
     @Override
     public boolean handleMessage(Message message) {
         Toast.makeText(this, message.what, Toast.LENGTH_SHORT).show();
@@ -68,7 +73,9 @@ public class JustVpnService extends VpnService implements Handler.Callback {
         }
         return true;
     }
-    private void connect() {
+    @RequiresApi(api = Build.VERSION_CODES.O)
+    private void connect()
+    {
         // Become a foreground service. Background services can be VPN services too, but they can
         // be killed by background check before getting a chance to receive onRevoke().
         updateForegroundNotification(R.string.connecting);
@@ -76,24 +83,21 @@ public class JustVpnService extends VpnService implements Handler.Callback {
         // Extract information from the shared preferences.
         final SharedPreferences prefs = getSharedPreferences(JustVpnClient.Prefs.NAME, MODE_PRIVATE);
         final String server = prefs.getString(JustVpnClient.Prefs.SERVER_ADDRESS, "");
-        final byte[] secret = prefs.getString(JustVpnClient.Prefs.SHARED_SECRET, "").getBytes();
-        final boolean allow = prefs.getBoolean(JustVpnClient.Prefs.ALLOW, true);
-        final Set<String> packages =
-                prefs.getStringSet(JustVpnClient.Prefs.PACKAGES, Collections.emptySet());
         final int port = prefs.getInt(JustVpnClient.Prefs.SERVER_PORT, 0);
-        final String proxyHost = prefs.getString(JustVpnClient.Prefs.PROXY_HOSTNAME, "");
-        final int proxyPort = prefs.getInt(JustVpnClient.Prefs.PROXY_PORT, 0);
+        final byte[] secret = prefs.getString(JustVpnClient.Prefs.SHARED_SECRET, "").getBytes();
         startConnection(new JustVpnConnection(
-                this, mNextConnectionId.getAndIncrement(), server, port, secret,
-                proxyHost, proxyPort, allow, packages));
+                this, mNextConnectionId.getAndIncrement(), server, port, secret));
     }
-    private void startConnection(final JustVpnConnection connection) {
+    private void startConnection(final JustVpnConnection connection)
+    {
+        mJustVpnConnection = connection;
         // Replace any existing connecting thread with the  new one.
-        final Thread thread = new Thread(connection, "ToyVpnThread");
+        final Thread thread = new Thread(connection, "JustVpnThread");
         setConnectingThread(thread);
         // Handler to mark as connected once onEstablish is called.
         connection.setConfigureIntent(mConfigureIntent);
-        connection.setOnEstablishListener(tunInterface -> {
+        connection.setOnEstablishListener(tunInterface ->
+        {
             mHandler.sendEmptyMessage(R.string.connected);
             mConnectingThread.compareAndSet(thread, null);
             setConnection(new Connection(thread, tunInterface));
@@ -117,14 +121,17 @@ public class JustVpnService extends VpnService implements Handler.Callback {
             }
         }
     }
-    private void disconnect() {
+    private void disconnect()
+    {
+        mJustVpnConnection.Disconnect();
         mHandler.sendEmptyMessage(R.string.disconnected);
         setConnectingThread(null);
         setConnection(null);
         stopForeground(true);
     }
     @RequiresApi(api = Build.VERSION_CODES.O)
-    private void updateForegroundNotification(final int message) {
+    private void updateForegroundNotification(final int message)
+    {
         final String NOTIFICATION_CHANNEL_ID = "ToyVpn";
         NotificationManager mNotificationManager = (NotificationManager) getSystemService(
                 NOTIFICATION_SERVICE);

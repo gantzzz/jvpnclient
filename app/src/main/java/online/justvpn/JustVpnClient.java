@@ -36,54 +36,24 @@ public class JustVpnClient extends AppCompatActivity{
         final TextView serverAddress = findViewById(R.id.address);
         final TextView serverPort = findViewById(R.id.port);
         final TextView sharedSecret = findViewById(R.id.secret);
-        final TextView proxyHost = findViewById(R.id.proxyhost);
-        final TextView proxyPort = findViewById(R.id.proxyport);
-        final RadioButton allowed = findViewById(R.id.allowed);
-        final TextView packages = findViewById(R.id.packages);
         final SharedPreferences prefs = getSharedPreferences(Prefs.NAME, MODE_PRIVATE);
         serverAddress.setText(prefs.getString(Prefs.SERVER_ADDRESS, ""));
         int serverPortPrefValue = prefs.getInt(Prefs.SERVER_PORT, 0);
         serverPort.setText(String.valueOf(serverPortPrefValue == 0 ? "" : serverPortPrefValue));
         sharedSecret.setText(prefs.getString(Prefs.SHARED_SECRET, ""));
-        proxyHost.setText(prefs.getString(Prefs.PROXY_HOSTNAME, ""));
-        int proxyPortPrefValue = prefs.getInt(Prefs.PROXY_PORT, 0);
-        proxyPort.setText(proxyPortPrefValue == 0 ? "" : String.valueOf(proxyPortPrefValue));
-        allowed.setChecked(prefs.getBoolean(Prefs.ALLOW, true));
-        packages.setText(String.join(", ", prefs.getStringSet(
-                Prefs.PACKAGES, Collections.emptySet())));
+
         findViewById(R.id.connect).setOnClickListener(v -> {
-            if (!checkProxyConfigs(proxyHost.getText().toString(),
-                    proxyPort.getText().toString())) {
-                return;
-            }
-            final Set<String> packageSet =
-                    Arrays.stream(packages.getText().toString().split(","))
-                            .map(String::trim)
-                            .filter(s -> !s.isEmpty())
-                            .collect(Collectors.toSet());
-            if (!checkPackages(packageSet)) {
-                return;
-            }
             int serverPortNum;
             try {
                 serverPortNum = Integer.parseInt(serverPort.getText().toString());
             } catch (NumberFormatException e) {
                 serverPortNum = 0;
             }
-            int proxyPortNum;
-            try {
-                proxyPortNum = Integer.parseInt(proxyPort.getText().toString());
-            } catch (NumberFormatException e) {
-                proxyPortNum = 0;
-            }
+
             prefs.edit()
                     .putString(Prefs.SERVER_ADDRESS, serverAddress.getText().toString())
                     .putInt(Prefs.SERVER_PORT, serverPortNum)
                     .putString(Prefs.SHARED_SECRET, sharedSecret.getText().toString())
-                    .putString(Prefs.PROXY_HOSTNAME, proxyHost.getText().toString())
-                    .putInt(Prefs.PROXY_PORT, proxyPortNum)
-                    .putBoolean(Prefs.ALLOW, allowed.isChecked())
-                    .putStringSet(Prefs.PACKAGES, packageSet)
                     .commit();
             Intent intent = VpnService.prepare(JustVpnClient.this);
             if (intent != null) {
@@ -116,6 +86,7 @@ public class JustVpnClient extends AppCompatActivity{
     }
     @Override
     protected void onActivityResult(int request, int result, Intent data) {
+        super.onActivityResult(request, result, data);
         if (result == RESULT_OK) {
             startService(getServiceIntent().setAction(JustVpnService.ACTION_CONNECT));
         }

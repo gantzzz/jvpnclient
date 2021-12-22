@@ -20,6 +20,7 @@ import java.net.SocketAddress;
 import java.net.SocketException;
 import java.nio.ByteBuffer;
 import java.nio.channels.DatagramChannel;
+import java.nio.charset.StandardCharsets;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 public class JustVpnConnection implements Runnable {
@@ -62,30 +63,16 @@ public class JustVpnConnection implements Runnable {
     private final byte[] mSharedSecret;
     private PendingIntent mConfigureIntent;
     private OnEstablishListener mOnEstablishListener;
-    // Proxy settings
-    private String mProxyHostName;
-    private int mProxyHostPort;
-    // Allowed/Disallowed packages for VPN usage
-    private final boolean mAllow;
-    private final Set<String> mPackages;
+
+    private DatagramChannel mTunnel;
+
     public JustVpnConnection(final VpnService service, final int connectionId,
-                            final String serverName, final int serverPort, final byte[] sharedSecret,
-                            final String proxyHostName, final int proxyHostPort, boolean allow,
-                            final Set<String> packages) {
+                            final String serverName, final int serverPort, final byte[] sharedSecret) {
         mService = service;
         mConnectionId = connectionId;
         mServerName = serverName;
         mServerPort= serverPort;
         mSharedSecret = sharedSecret;
-        if (!TextUtils.isEmpty(proxyHostName)) {
-            mProxyHostName = proxyHostName;
-        }
-        if (proxyHostPort > 0) {
-            // The port value is always an integer due to the configured inputType.
-            mProxyHostPort = proxyHostPort;
-        }
-        mAllow = allow;
-        mPackages = packages;
     }
     /**
      * Optionally, set an intent to configure the VPN. This is {@code null} by default.
@@ -98,7 +85,8 @@ public class JustVpnConnection implements Runnable {
     }
     @RequiresApi(api = Build.VERSION_CODES.Q)
     @Override
-    public void run() {
+    public void run()
+    {
         try {
             Log.i(getTag(), "Starting");
             // If anything needs to be obtained using the network, get it now.
@@ -123,25 +111,78 @@ public class JustVpnConnection implements Runnable {
             Log.e(getTag(), "Connection failed, exiting", e);
         }
     }
+    public void ProcessControl(ByteBuffer packet, int length) throws IOException {
+        String s = new String(packet.array(), StandardCharsets.UTF_8);
+        if (s.contains("action:keepalive"))
+        {
+            // response to the server with keepalive
+            ByteBuffer p = ByteBuffer.allocate(28);
+            // Control messages always start with zero.
+            String action = "action:keepalive";
+            p.put((byte) 0).put(action.getBytes()).flip();
+            // Send the secret several times in case of packet loss.
+            for (int i = 0; i < 3; ++i)
+            {
+                p.position(0);
+                mTunnel.write(p);
+            }
+            p.clear();
+        }
+    }
+    public void Disconnect()
+    {
+
+        Thread thread = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try  {
+                    // send disconnect control message to server
+                    ByteBuffer packet = ByteBuffer.allocate(1024);
+                    // Control messages always start with zero.
+                    String action = "action:disconnect";
+                    packet.put((byte) 0).put(action.getBytes()).flip();
+                    // Send the secret several times in case of packet loss.
+                    for (int i = 0; i < 3; ++i)
+                    {
+                        packet.position(0);
+                        mTunnel.write(packet);
+                    }
+                    packet.clear();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+        });
+
+        thread.start();
+        try {
+            thread.join();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
     @RequiresApi(api = Build.VERSION_CODES.Q)
     private boolean run(SocketAddress server)
-            throws IOException, InterruptedException, IllegalArgumentException {
+            throws IOException, InterruptedException, IllegalArgumentException
+    {
         ParcelFileDescriptor iface = null;
         boolean connected = false;
         // Create a DatagramChannel as the VPN tunnel.
-        try (DatagramChannel tunnel = DatagramChannel.open())
+        try
         {
+            mTunnel = DatagramChannel.open();
             // Protect the tunnel before connecting to avoid loopback.
-            if (!mService.protect(tunnel.socket())) {
+            if (!mService.protect(mTunnel.socket()))
+            {
                 throw new IllegalStateException("Cannot protect the tunnel");
             }
             // Connect to the server.
-            tunnel.connect(server);
+            mTunnel.connect(server);
             // For simplicity, we use the same thread for both reading and
             // writing. Here we put the tunnel into non-blocking mode.
-            tunnel.configureBlocking(false);
+            mTunnel.configureBlocking(false);
             // Authenticate and configure the virtual network interface.
-            iface = handshake(tunnel);
+            iface = handshake();
             // Now we are connected. Set the flag.
             connected = true;
             // Packets to be sent are queued in this input stream.
@@ -156,52 +197,31 @@ public class JustVpnConnection implements Runnable {
             long lastSendTime = System.currentTimeMillis();
             long lastReceiveTime = System.currentTimeMillis();
             // We keep forwarding packets till something goes wrong.
-            while (true) {
-                // Assume that we did not make any progress in this iteration.
-                boolean idle = true;
+            while (true)
+            {
                 // Read the outgoing packet from the input stream.
                 int length = in.read(packet.array());
                 if (length > 0) {
                     // Write the outgoing packet to the tunnel.
                     packet.limit(length);
-                    tunnel.write(packet);
+                    mTunnel.write(packet);
                     packet.clear();
-                    // There might be more outgoing packets.
-                    idle = false;
-                    lastReceiveTime = System.currentTimeMillis();
                 }
                 // Read the incoming packet from the tunnel.
-                length = tunnel.read(packet);
-                if (length > 0) {
+                length = mTunnel.read(packet);
+                if (length > 0)
+                {
                     // Ignore control messages, which start with zero.
-                    if (packet.get(0) != 0) {
+                    if (packet.get(0) != 0)
+                    {
                         // Write the incoming packet to the output stream.
                         out.write(packet.array(), 0, length);
                     }
-                    packet.clear();
-                    // There might be more incoming packets.
-                    idle = false;
-                    lastSendTime = System.currentTimeMillis();
-                }
-                // If we are idle or waiting for the network, sleep for a
-                // fraction of time to avoid busy looping.
-                if (idle) {
-                    Thread.sleep(IDLE_INTERVAL_MS);
-                    final long timeNow = System.currentTimeMillis();
-                    if (lastSendTime + KEEPALIVE_INTERVAL_MS <= timeNow) {
-                        // We are receiving for a long time but not sending.
-                        // Send empty control messages.
-                        packet.put((byte) 0).limit(1);
-                        for (int i = 0; i < 3; ++i) {
-                            packet.position(0);
-                            tunnel.write(packet);
-                        }
-                        packet.clear();
-                        lastSendTime = timeNow;
-                    } else if (lastReceiveTime + RECEIVE_TIMEOUT_MS <= timeNow) {
-                        // We are sending for a long time but not receiving.
-                        throw new IllegalStateException("Timed out");
+                    else
+                    {
+                        ProcessControl(packet, length);
                     }
+                    packet.clear();
                 }
             }
         } catch (SocketException e) {
@@ -218,7 +238,7 @@ public class JustVpnConnection implements Runnable {
         return connected;
     }
     @RequiresApi(api = Build.VERSION_CODES.Q)
-    private ParcelFileDescriptor handshake(DatagramChannel tunnel)
+    private ParcelFileDescriptor handshake()
             throws IOException, InterruptedException {
         // To build a secured tunnel, we should perform mutual authentication
         // and exchange session keys for encryption. To keep things simple in
@@ -227,29 +247,52 @@ public class JustVpnConnection implements Runnable {
         // Allocate the buffer for handshaking. We have a hardcoded maximum
         // handshake size of 1024 bytes, which should be enough for demo
         // purposes.
-        ByteBuffer packet = ByteBuffer.allocate(1024);
+        // send disconnect control message to server
+        ByteBuffer packet = ByteBuffer.allocate(1500);
+
         // Control messages always start with zero.
-        packet.put((byte) 0).put(mSharedSecret).flip();
-        // Send the secret several times in case of packet loss.
-        for (int i = 0; i < 3; ++i) {
-            packet.position(0);
-            tunnel.write(packet);
-        }
+        String action = "action:connect";
+        packet.put((byte) 0).put(action.getBytes()).flip();
+        packet.position(0);
+        mTunnel.write(packet);
         packet.clear();
+
+        // request parameters
+        action ="action:getparameters";
+        packet.put((byte) 0).put(action.getBytes()).flip();
+        packet.position(0);
+        mTunnel.write(packet);
+        packet.clear();
+
         // Wait for the parameters within a limited time.
-        for (int i = 0; i < MAX_HANDSHAKE_ATTEMPTS; ++i) {
+        for (int i = 0; i < MAX_HANDSHAKE_ATTEMPTS; ++i)
+        {
             Thread.sleep(IDLE_INTERVAL_MS);
             // Normally we should not receive random packets. Check that the first
             // byte is 0 as expected.
-            int length = tunnel.read(packet);
-            if (length > 0 && packet.get(0) == 0) {
-                return configure(new String(packet.array(), 1, length - 1, US_ASCII).trim());
+            int length = mTunnel.read(packet);
+            if (length > 0 && packet.get(0) == 0)
+            {
+                ParcelFileDescriptor descriptor = configure(new String(packet.array(), 1, length - 1, US_ASCII).trim());
+                // signal configured
+
+                packet.position(0);
+                packet.clear();
+                action ="action:configured";
+                packet.put((byte) 0).put(action.getBytes()).flip();
+                packet.position(0);
+                mTunnel.write(packet);
+                packet.position(0);
+                packet.clear();
+
+                return descriptor;
             }
         }
         throw new IOException("Timed out");
     }
     @RequiresApi(api = Build.VERSION_CODES.Q)
-    private ParcelFileDescriptor configure(String parameters) throws IllegalArgumentException {
+    private ParcelFileDescriptor configure(String parameters) throws IllegalArgumentException
+    {
         // Configure a builder while parsing the parameters.
         VpnService.Builder builder = mService.new Builder();
         for (String parameter : parameters.split(";")) {
@@ -278,21 +321,9 @@ public class JustVpnConnection implements Runnable {
         }
         // Create a new interface using the builder and save the parameters.
         final ParcelFileDescriptor vpnInterface;
-        for (String packageName : mPackages) {
-            try {
-                if (mAllow) {
-                    builder.addAllowedApplication(packageName);
-                } else {
-                    builder.addDisallowedApplication(packageName);
-                }
-            } catch (PackageManager.NameNotFoundException e){
-                Log.w(getTag(), "Package not available: " + packageName, e);
-            }
-        }
+
         builder.setSession(mServerName).setConfigureIntent(mConfigureIntent);
-        if (!TextUtils.isEmpty(mProxyHostName)) {
-            builder.setHttpProxy(ProxyInfo.buildDirectProxy(mProxyHostName, mProxyHostPort));
-        }
+
         synchronized (mService) {
             vpnInterface = builder.establish();
             if (mOnEstablishListener != null) {
@@ -302,6 +333,7 @@ public class JustVpnConnection implements Runnable {
         Log.i(getTag(), "New interface: " + vpnInterface + " (" + parameters + ")");
         return vpnInterface;
     }
+
     private final String getTag() {
         return JustVpnConnection.class.getSimpleName() + "[" + mConnectionId + "]";
     }
