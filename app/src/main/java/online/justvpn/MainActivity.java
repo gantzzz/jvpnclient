@@ -1,32 +1,73 @@
 package online.justvpn;
 
 import android.content.Intent;
+import android.os.Build;
 import android.os.Bundle;
 
-import com.google.android.material.snackbar.Snackbar;
-
+import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AppCompatActivity;
-
 import android.view.View;
-
-import androidx.navigation.NavController;
-import androidx.navigation.Navigation;
-import androidx.navigation.fragment.NavHostFragment;
 import androidx.navigation.ui.AppBarConfiguration;
-import androidx.navigation.ui.NavigationUI;
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
 import online.justvpn.databinding.ActivityMainBinding;
-
 import android.view.Menu;
 import android.view.MenuItem;
+import android.widget.AdapterView;
+import android.widget.ListView;
 
-public class MainActivity extends AppCompatActivity {
+import com.android.volley.Request;
+import com.android.volley.RequestQueue;
+import com.android.volley.Response;
+import com.android.volley.VolleyError;
+import com.android.volley.toolbox.StringRequest;
+import com.android.volley.toolbox.Volley;
 
-    private AppBarConfiguration appBarConfiguration;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.util.ArrayList;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.ActivityResult;
+import androidx.activity.result.ActivityResultCallback;
+import androidx.activity.result.contract.ActivityResultContracts;
+import android.app.Activity;
+import android.net.VpnService;
+import android.widget.Switch;
+
+public class MainActivity extends AppCompatActivity
+{
     private ActivityMainBinding binding;
+    private boolean mUserVpnAllowed = false;
 
+    private void requestVpnServicePermissionDialog()
+    {
+        // Ask for vpn service permission
+        Intent dialog = VpnService.prepare(getApplicationContext());
+        if (dialog != null)
+        {
+            ActivityResultLauncher<Intent> VpnServiceActivityResultLauncher = registerForActivityResult(
+                    new ActivityResultContracts.StartActivityForResult(),
+                    result -> {
+                        if (result.getResultCode() == Activity.RESULT_OK)
+                        {
+                            mUserVpnAllowed = true;
+                        }
+                    });
+            VpnServiceActivityResultLauncher.launch(dialog);
+        }
+        else
+        {
+            // already permitted
+            mUserVpnAllowed = true;
+        }
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.O)
     @Override
-    protected void onCreate(Bundle savedInstanceState) {
+    protected void onCreate(Bundle savedInstanceState)
+    {
         super.onCreate(savedInstanceState);
 
         binding = ActivityMainBinding.inflate(getLayoutInflater());
@@ -34,17 +75,99 @@ public class MainActivity extends AppCompatActivity {
 
         setSupportActionBar(binding.toolbar);
 
-        NavController navController = Navigation.findNavController(this, R.id.nav_host_fragment_content_main);
-        appBarConfiguration = new AppBarConfiguration.Builder(navController.getGraph()).build();
-        NavigationUI.setupActionBarWithNavController(this, navController, appBarConfiguration);
+        // update servers list
+        binding.pullToRefresh.setOnRefreshListener(() -> getServersAvailable());
 
-        binding.fab.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                Intent VpnClient = new Intent(getApplicationContext(),JustVpnClient.class);
-                startActivity(VpnClient);
+        binding.pullToRefresh.setRefreshing(true);
+        getServersAvailable();
+
+        requestVpnServicePermissionDialog();
+
+        binding.serversListView.setOnItemClickListener((adapterView, view, i, l) ->
+                processServerItemSelected(adapterView, view, i, l));
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.O)
+    private void processServerItemSelected(AdapterView<?> adapterView, View view, int i, long l)
+    {
+        if (!mUserVpnAllowed)
+        {
+            requestVpnServicePermissionDialog();
+            return;
+        }
+
+        Switch selected = view.findViewById(R.id.enableSwitch);
+
+        Intent service = new Intent(getApplicationContext(), JustVpnService.class);
+
+        // Uncheck all but selected
+        for (int b = 0; b < binding.serversListView.getChildCount(); b++)
+        {
+            View child = binding.serversListView.getChildAt(b);
+            Switch toDisable = child.findViewById(R.id.enableSwitch);
+            if (!selected.equals(toDisable))
+            {
+                // disconnect any previous connection
+                if (toDisable.isChecked())
+                {
+                    startForegroundService(service.setAction(JustVpnService.ACTION_DISCONNECT));
+                }
+                toDisable.setChecked(false);
             }
-        });
+        }
+
+        // disconnect
+        if (selected.isChecked())
+        {
+            selected.setChecked(false);
+            startForegroundService(service.setAction(JustVpnService.ACTION_DISCONNECT));
+        }
+        // connect
+        else
+        {
+            selected.setChecked(true);
+            ServerListItemDataModel model = (ServerListItemDataModel)adapterView.getItemAtPosition(i);
+
+            service.putExtra("ip", model.get_ip());
+            startForegroundService(service.setAction(JustVpnService.ACTION_CONNECT));
+        }
+    }
+
+    private void getServersAvailable()
+    {
+        // Download servers list
+        RequestQueue queue = Volley.newRequestQueue(this);
+        String url = "http://justvpn.online/api/getservers";
+
+        // Request a string response from the provided URL.
+        StringRequest stringRequest = new StringRequest(Request.Method.GET, url,
+                response ->
+                {
+                    ArrayList<ServerListItemDataModel> dataModels = new ArrayList<>();
+                    try {
+                        JSONArray jArray = new JSONArray(response);
+                        for (int i = 0; i < jArray.length(); i++)
+                        {
+                            JSONArray serverArr = jArray.getJSONArray(i);
+                            String ip = serverArr.get(0).toString();
+                            String country = serverArr.get(1).toString();
+                            dataModels.add(new ServerListItemDataModel(ip, country));
+                        }
+
+                        binding.serversListView.setAdapter(new ServerListItemAdaptor(getApplicationContext(), dataModels));
+                    } catch (JSONException e)
+                    {
+                        e.printStackTrace();
+                    }
+                }, error -> {
+                    // TODO: Show messagebox
+                }
+        );
+
+        // Add the request to the RequestQueue.
+        queue.add(stringRequest);
+
+        binding.pullToRefresh.setRefreshing(false);
     }
 
     @Override
@@ -67,12 +190,5 @@ public class MainActivity extends AppCompatActivity {
         }
 
         return super.onOptionsItemSelected(item);
-    }
-
-    @Override
-    public boolean onSupportNavigateUp() {
-        NavController navController = Navigation.findNavController(this, R.id.nav_host_fragment_content_main);
-        return NavigationUI.navigateUp(navController, appBarConfiguration)
-                || super.onSupportNavigateUp();
     }
 }

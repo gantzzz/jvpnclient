@@ -20,31 +20,6 @@
         android:orientation="vertical"
         android:padding="3mm">
 
-        <TextView android:text="@string/address"
-            android:layout_height="wrap_content"
-            android:layout_width="match_parent"/>
-        <EditText android:id="@+id/address"
-            android:layout_height="wrap_content"
-            android:layout_width="match_parent"/>
-        <TextView android:text="@string/port"
-            android:layout_height="wrap_content"
-            android:layout_width="match_parent"/>
-        <EditText android:id="@+id/port" android:inputType="number"
-            android:layout_height="wrap_content"
-            android:layout_width="match_parent"/>
-        <TextView android:text="@string/secret"
-            android:layout_height="wrap_content"
-            android:layout_width="match_parent"/>
-        <EditText android:id="@+id/secret" android:password="true"
-            android:layout_height="wrap_content"
-            android:layout_width="match_parent"/>
-
-        <TextView
-            android:id="@+id/packages"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Packages"/>
-
         <Button
             android:id="@+id/connect"
             android:layout_width="wrap_content"

@@ -2,7 +2,7 @@
     <string name="app_name">justvpn</string>
     <string name="action_settings">Settings</string>
     <!-- Strings used for fragments for navigation -->
-    <string name="first_fragment_label">First Fragment</string>
+    <string name="main_fragment_label">Welcome to JustVpn</string>
     <string name="second_fragment_label">Second Fragment</string>
     <string name="next">Next</string>
     <string name="previous">Previous</string>
@@ -12,13 +12,8 @@
     <string name="disconnected">disconnected</string>
     <string name="connecting">connecting</string>
     <string name="connected">connected</string>
-    <string name="incomplete_proxy_settings">incomplete proxy settings</string>
-    <string name="unknown_package_names">unknown package names</string>
     <string name="address">address</string>
-    <string name="allowed">allowed</string>
-    <string name="disallowed">disallowed</string>
     <string name="port">port</string>
-    <string name="proxyhost">proxyhost</string>
-    <string name="proxyport">proxyport</string>
-    <string name="secret">secret</string>
+    <string name="servers">servers available</string>
+    <string name="connect">connect</string>
 </resources>
