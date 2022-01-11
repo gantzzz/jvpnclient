@@ -1,37 +1,35 @@
 package online.justvpn;
 
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.os.Build;
 import android.os.Bundle;
 
 import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AppCompatActivity;
 import android.view.View;
-import androidx.navigation.ui.AppBarConfiguration;
-import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
 import online.justvpn.databinding.ActivityMainBinding;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.widget.AdapterView;
-import android.widget.ListView;
 
 import com.android.volley.Request;
 import com.android.volley.RequestQueue;
-import com.android.volley.Response;
-import com.android.volley.VolleyError;
 import com.android.volley.toolbox.StringRequest;
 import com.android.volley.toolbox.Volley;
+import com.google.android.material.switchmaterial.SwitchMaterial;
 
 import org.json.JSONArray;
 import org.json.JSONException;
-import org.json.JSONObject;
 
 import java.util.ArrayList;
 import androidx.activity.result.ActivityResultLauncher;
-import androidx.activity.result.ActivityResult;
-import androidx.activity.result.ActivityResultCallback;
 import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.localbroadcastmanager.content.LocalBroadcastManager;
+
 import android.app.Activity;
 import android.net.VpnService;
 import android.widget.Switch;
@@ -40,6 +38,27 @@ public class MainActivity extends AppCompatActivity
 {
     private ActivityMainBinding binding;
     private boolean mUserVpnAllowed = false;
+
+    private BroadcastReceiver mMessageReceiver = new BroadcastReceiver()
+    {
+        @Override
+        public void onReceive(Context context, Intent intent)
+        {
+            // Get extra data included in the Intent
+            String message = intent.getStringExtra("Status");
+            if (message.contains("failed"))
+            {
+                // connection attempt was rejected
+                // Uncheck all
+                for (int b = 0; b < binding.serversListView.getChildCount(); b++)
+                {
+                    View child = binding.serversListView.getChildAt(b);
+                    Switch toDisable = child.findViewById(R.id.enableSwitch);
+                    toDisable.setChecked(false);
+                }
+            }
+        }
+    };
 
     private void requestVpnServicePermissionDialog()
     {
@@ -76,15 +95,16 @@ public class MainActivity extends AppCompatActivity
         setSupportActionBar(binding.toolbar);
 
         // update servers list
-        binding.pullToRefresh.setOnRefreshListener(() -> getServersAvailable());
+        binding.pullToRefresh.setOnRefreshListener(this::getServersAvailable);
 
         binding.pullToRefresh.setRefreshing(true);
         getServersAvailable();
 
         requestVpnServicePermissionDialog();
 
-        binding.serversListView.setOnItemClickListener((adapterView, view, i, l) ->
-                processServerItemSelected(adapterView, view, i, l));
+        binding.serversListView.setOnItemClickListener(this::processServerItemSelected);
+
+        LocalBroadcastManager.getInstance(this).registerReceiver(mMessageReceiver, new IntentFilter("JustVpnMsg"));
     }
 
     @RequiresApi(api = Build.VERSION_CODES.O)

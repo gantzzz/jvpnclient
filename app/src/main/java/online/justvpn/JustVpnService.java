@@ -16,6 +16,7 @@ import android.util.Pair;
 import android.widget.Toast;
 
 import androidx.annotation.RequiresApi;
+import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import java.io.IOException;
 import java.util.Collections;
@@ -30,11 +31,12 @@ public class JustVpnService extends VpnService implements Handler.Callback {
     public static final String ACTION_CONNECT = "online.justvpn.START";
     public static final String ACTION_DISCONNECT = "online.justvpn.STOP";
     private Handler mHandler;
-    private Timer mConnectionCheckTimer = new Timer();
-    private long CONNECTION_CHECK_PERIOD =  TimeUnit.SECONDS.toMillis(60);
+    private Timer mConnectionCheckTimer = null;
+    private long CONNECTION_CHECK_PERIOD =  TimeUnit.SECONDS.toMillis(10);
     private static class Connection extends Pair<Thread, ParcelFileDescriptor>
     {
-        public Connection(Thread thread, ParcelFileDescriptor pfd) {
+        public Connection(Thread thread, ParcelFileDescriptor pfd)
+        {
             super(thread, pfd);
         }
     }
@@ -43,23 +45,59 @@ public class JustVpnService extends VpnService implements Handler.Callback {
     private AtomicInteger mNextConnectionId = new AtomicInteger(1);
     private PendingIntent mConfigureIntent;
     private JustVpnConnection mJustVpnConnection;
-    private Intent mIntent;
+    private String mServer;
+
     @Override
     public void onCreate()
     {
         // The handler is only used to show messages.
-        if (mHandler == null) {
+        if (mHandler == null)
+        {
             mHandler = new Handler(this);
         }
         // Create the intent to "configure" the connection (just start ToyVpnClient).
-        mConfigureIntent = PendingIntent.getActivity(this, 0, new Intent(this, JustVpnService.class),
-                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        //mConfigureIntent = PendingIntent.getActivity(this, 0, new Intent(this, JustVpnService.class),
+       //         PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
     }
+
+    private void startConnectionMonitor()
+    {
+        if (mConnectionCheckTimer != null)
+        {
+            mConnectionCheckTimer.cancel();
+        }
+        mConnectionCheckTimer = new Timer();
+        mConnectionCheckTimer.schedule(new TimerTask()
+        {
+            @RequiresApi(api = Build.VERSION_CODES.O)
+            @Override
+            public void run()
+            {
+                long currentTime = System.currentTimeMillis();
+
+                if (mJustVpnConnection != null)
+                {
+                    if (mJustVpnConnection.mLastPacketReceived + 5000 <= currentTime)
+                    {
+                        // we haven't received anything for awhile, reconnect
+                        setConnectingThread(null);
+                        setConnection(null);
+                        connect(true);
+                    }
+                }
+            }
+        }, CONNECTION_CHECK_PERIOD, CONNECTION_CHECK_PERIOD);
+    }
+
     @RequiresApi(api = Build.VERSION_CODES.O)
     @Override
     public int onStartCommand(Intent intent, int flags, int startId)
     {
-        mIntent = intent;
+        if (intent != null)
+        {
+            mServer = intent.getStringExtra("ip");
+        }
+
         if (intent != null && ACTION_DISCONNECT.equals(intent.getAction()))
         {
             disconnect();
@@ -68,6 +106,14 @@ public class JustVpnService extends VpnService implements Handler.Callback {
         else
         {
             connect(false);
+
+            // Schedule timer to check connection state
+            if (mConnectionCheckTimer != null)
+            {
+                mConnectionCheckTimer.cancel();
+                mConnectionCheckTimer = null;
+            }
+
             return START_STICKY;
         }
     }
@@ -98,30 +144,7 @@ public class JustVpnService extends VpnService implements Handler.Callback {
             mHandler.sendEmptyMessage(R.string.connecting);
         }
 
-        // Extract information from the shared preferences.
-        String server = mIntent.getStringExtra("ip");
-        startConnection(new JustVpnConnection(this, mNextConnectionId.getAndIncrement(), server, 8811));
-
-        // Schedule timer to check connection state
-        mConnectionCheckTimer.schedule(new TimerTask()
-        {
-            @Override
-            public void run()
-            {
-                long currentTime = System.currentTimeMillis();
-
-                if (mConnection.get() != null)
-                {
-                    if (mJustVpnConnection.mLastPacketReceived + 60000 <= currentTime)
-                    {
-                        // we haven't received anything for awhile, reconnect
-                        setConnectingThread(null);
-                        setConnection(null);
-                        connect(true);
-                    }
-                }
-            }
-        }, CONNECTION_CHECK_PERIOD, CONNECTION_CHECK_PERIOD);
+        startConnection(new JustVpnConnection(this, mNextConnectionId.getAndIncrement(), mServer, 8811));
     }
     private void startConnection(final JustVpnConnection connection)
     {
@@ -131,12 +154,32 @@ public class JustVpnService extends VpnService implements Handler.Callback {
         setConnectingThread(thread);
         // Handler to mark as connected once onEstablish is called.
         connection.setConfigureIntent(mConfigureIntent);
-        connection.setOnEstablishListener(tunInterface ->
+
+
+        connection.setOnConnectionStateListener((state, vpnInterface) ->
         {
-            mHandler.sendEmptyMessage(R.string.connected);
-            mConnectingThread.compareAndSet(thread, null);
-            setConnection(new Connection(thread, tunInterface));
+            switch (state)
+            {
+                case ESTABLISHED:
+                    mHandler.sendEmptyMessage(R.string.connected);
+                    mConnectingThread.compareAndSet(thread, null);
+                    setConnection(new Connection(thread, vpnInterface));
+                    // once connected, monitor the connection health
+                    startConnectionMonitor();
+                    break;
+
+                case FAILED:
+                case TIMEDOUT:
+                    // don't disconnect a connection that was recently active
+                    if (mConnectionCheckTimer == null)
+                    {
+                        disconnect();
+                        sendMessageToActivity("failed");
+                    }
+                    break;
+            }
         });
+
         thread.start();
     }
     private void setConnectingThread(final Thread thread)
@@ -154,7 +197,12 @@ public class JustVpnService extends VpnService implements Handler.Callback {
         {
             try {
                 oldConnection.first.interrupt();
-                oldConnection.second.close();
+
+                // Closing socket interface
+                if (oldConnection.second != null)
+                {
+                    oldConnection.second.close();
+                }
             } catch (IOException e) {
                 Log.e(TAG, "Closing VPN interface", e);
             }
@@ -162,6 +210,12 @@ public class JustVpnService extends VpnService implements Handler.Callback {
     }
     private void disconnect()
     {
+        if (mConnectionCheckTimer != null)
+        {
+            mConnectionCheckTimer.cancel();
+            mConnectionCheckTimer = null;
+        }
+
         if (mJustVpnConnection != null)
         {
             mJustVpnConnection.Disconnect();
@@ -187,5 +241,12 @@ public class JustVpnService extends VpnService implements Handler.Callback {
                 .setContentText(getString(message))
                 .setContentIntent(mConfigureIntent)
                 .build());
+    }
+
+    private void sendMessageToActivity(String msg)
+    {
+        Intent intent = new Intent("JustVpnMsg");
+        intent.putExtra("Status", msg);
+        LocalBroadcastManager.getInstance(this).sendBroadcast(intent);
     }
 }
