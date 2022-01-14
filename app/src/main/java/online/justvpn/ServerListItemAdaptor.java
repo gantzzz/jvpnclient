@@ -1,6 +1,9 @@
 package online.justvpn;
 
 import android.content.Context;
+import android.graphics.drawable.Drawable;
+import android.graphics.drawable.Icon;
+import android.media.Image;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -68,6 +71,20 @@ public class ServerListItemAdaptor extends ArrayAdapter<ServerListItemDataModel>
             viewHolder = (ViewHolder) convertView.getTag();
         }
 
+        switch (model.get_country())
+        {
+            case "NL":
+                viewHolder.countryFlag.setImageResource(R.mipmap.ic_nl);
+                break;
+            case "RU":
+                viewHolder.countryFlag.setImageResource(R.mipmap.ic_ru);
+                break;
+            case "US":
+                viewHolder.countryFlag.setImageResource(R.mipmap.ic_us);
+                break;
+            default:
+                break;
+        }
         viewHolder.ip.setText(model.get_ip());
         viewHolder.countryName.setText(model.get_country());
 
