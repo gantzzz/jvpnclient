@@ -20,7 +20,6 @@ import com.android.volley.Request;
 import com.android.volley.RequestQueue;
 import com.android.volley.toolbox.StringRequest;
 import com.android.volley.toolbox.Volley;
-import com.google.android.material.switchmaterial.SwitchMaterial;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -33,6 +32,7 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 import android.app.Activity;
 import android.net.VpnService;
 import android.widget.Switch;
+import android.widget.TextView;
 
 public class MainActivity extends AppCompatActivity
 {
@@ -45,8 +45,14 @@ public class MainActivity extends AppCompatActivity
         public void onReceive(Context context, Intent intent)
         {
             // Get extra data included in the Intent
-            String message = intent.getStringExtra("Status");
-            if (message.contains("failed"))
+            String status = intent.getStringExtra("Status");
+
+            if (status == null)
+            {
+                return;
+            }
+
+            if (status.contains("failed"))
             {
                 // connection attempt was rejected
                 // Uncheck all
@@ -55,6 +61,24 @@ public class MainActivity extends AppCompatActivity
                     View child = binding.serversListView.getChildAt(b);
                     Switch toDisable = child.findViewById(R.id.enableSwitch);
                     toDisable.setChecked(false);
+                }
+            }
+            else if (status.contains("connected"))
+            {
+                // service notified about active connection, update switch -> enabled
+                String serverIp = status.split(":")[1];
+
+                for (int i = 0; i < binding.serversListView.getChildCount(); i++)
+                {
+                    View child = binding.serversListView.getChildAt(i);
+                    TextView ipView = child.findViewById(R.id.textViewIP);
+                    String ip = (String) ipView.getText();
+
+                    if (ip.equals(serverIp))
+                    {
+                        Switch toEnable = child.findViewById(R.id.enableSwitch);
+                        toEnable.setChecked(true);
+                    }
                 }
             }
         }
@@ -169,12 +193,17 @@ public class MainActivity extends AppCompatActivity
                         for (int i = 0; i < jArray.length(); i++)
                         {
                             JSONArray serverArr = jArray.getJSONArray(i);
-                            String ip = serverArr.get(0).toString();
-                            String country = serverArr.get(1).toString();
-                            dataModels.add(new ServerListItemDataModel(ip, country));
+                            int id = Integer.valueOf(serverArr.get(0).toString());
+                            String ip = serverArr.get(1).toString();
+                            String country = serverArr.get(2).toString();
+                            dataModels.add(new ServerListItemDataModel(id, ip, country));
                         }
 
                         binding.serversListView.setAdapter(new ServerListItemAdaptor(getApplicationContext(), dataModels));
+
+                        // If user refreshes the servers list while already connected, update switch
+                        // by asking the service to send active connection data
+                        updateActiveConnection();
                     } catch (JSONException e)
                     {
                         e.printStackTrace();
@@ -188,6 +217,14 @@ public class MainActivity extends AppCompatActivity
         queue.add(stringRequest);
 
         binding.pullToRefresh.setRefreshing(false);
+    }
+
+    private void updateActiveConnection()
+    {
+        // ask the service to send active connection data
+        Intent intent = new Intent("JustVpnMsg");
+        intent.putExtra("request", "getconnection");
+        LocalBroadcastManager.getInstance(this).sendBroadcast(intent);
     }
 
     @Override

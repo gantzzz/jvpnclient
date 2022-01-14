@@ -4,7 +4,10 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.net.VpnService;
 import android.os.Build;
@@ -13,6 +16,9 @@ import android.os.Message;
 import android.os.ParcelFileDescriptor;
 import android.util.Log;
 import android.util.Pair;
+import android.view.View;
+import android.widget.Switch;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.RequiresApi;
@@ -30,6 +36,7 @@ public class JustVpnService extends VpnService implements Handler.Callback {
     private static final String TAG = JustVpnService.class.getSimpleName();
     public static final String ACTION_CONNECT = "online.justvpn.START";
     public static final String ACTION_DISCONNECT = "online.justvpn.STOP";
+    public static final String ACTION_GETCONNECTION = "online.justvpn.GETCONNECTION";
     private Handler mHandler;
     private Timer mConnectionCheckTimer = null;
     private long CONNECTION_CHECK_PERIOD =  TimeUnit.SECONDS.toMillis(10);
@@ -43,9 +50,25 @@ public class JustVpnService extends VpnService implements Handler.Callback {
     private final AtomicReference<Thread> mConnectingThread = new AtomicReference<>();
     private final AtomicReference<Connection> mConnection = new AtomicReference<>();
     private AtomicInteger mNextConnectionId = new AtomicInteger(1);
-    private PendingIntent mConfigureIntent;
     private JustVpnConnection mJustVpnConnection;
     private String mServer;
+
+    private BroadcastReceiver mMessageReceiver = new BroadcastReceiver()
+    {
+        @Override
+        public void onReceive(Context context, Intent intent)
+        {
+            // Get extra data included in the Intent
+            String message = intent.getStringExtra("request");
+            if (message != null && message.equals("getconnection"))
+            {
+                if (mJustVpnConnection != null)
+                {
+                    sendMessageToActivity("connected:" + mJustVpnConnection.getServerIp());
+                }
+            }
+        }
+    };
 
     @Override
     public void onCreate()
@@ -55,9 +78,8 @@ public class JustVpnService extends VpnService implements Handler.Callback {
         {
             mHandler = new Handler(this);
         }
-        // Create the intent to "configure" the connection (just start ToyVpnClient).
-        //mConfigureIntent = PendingIntent.getActivity(this, 0, new Intent(this, JustVpnService.class),
-       //         PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+
+        LocalBroadcastManager.getInstance(this).registerReceiver(mMessageReceiver, new IntentFilter("JustVpnMsg"));
     }
 
     private void startConnectionMonitor()
@@ -98,23 +120,26 @@ public class JustVpnService extends VpnService implements Handler.Callback {
             mServer = intent.getStringExtra("ip");
         }
 
-        if (intent != null && ACTION_DISCONNECT.equals(intent.getAction()))
+        switch (intent.getAction())
         {
-            disconnect();
-            return START_NOT_STICKY;
-        }
-        else
-        {
-            connect(false);
+            case ACTION_DISCONNECT:
+                disconnect();
+                return START_NOT_STICKY;
 
-            // Schedule timer to check connection state
-            if (mConnectionCheckTimer != null)
-            {
-                mConnectionCheckTimer.cancel();
-                mConnectionCheckTimer = null;
-            }
 
-            return START_STICKY;
+            case ACTION_CONNECT:
+                // Timer is restarted once connection is established
+                if (mConnectionCheckTimer != null)
+                {
+                    mConnectionCheckTimer.cancel();
+                    mConnectionCheckTimer = null;
+                }
+
+                connect(false);
+                return START_STICKY;
+
+            default:
+                return START_NOT_STICKY;
         }
     }
     @Override
@@ -152,9 +177,6 @@ public class JustVpnService extends VpnService implements Handler.Callback {
         // Replace any existing connecting thread with the  new one.
         final Thread thread = new Thread(connection, "JustVpnThread");
         setConnectingThread(thread);
-        // Handler to mark as connected once onEstablish is called.
-        connection.setConfigureIntent(mConfigureIntent);
-
 
         connection.setOnConnectionStateListener((state, vpnInterface) ->
         {
@@ -239,7 +261,6 @@ public class JustVpnService extends VpnService implements Handler.Callback {
         startForeground(1, new Notification.Builder(this, NOTIFICATION_CHANNEL_ID)
                 .setSmallIcon(R.drawable.vpn_icon)
                 .setContentText(getString(message))
-                .setContentIntent(mConfigureIntent)
                 .build());
     }
 

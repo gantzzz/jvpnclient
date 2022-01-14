@@ -2,11 +2,13 @@ package online.justvpn;
 
 public class ServerListItemDataModel
 {
+    private int mId;
     private String mIp;
     private String mCountry;
 
-    public ServerListItemDataModel(String ip, String country)
+    public ServerListItemDataModel(int id, String ip, String country)
     {
+        mId = id;
         mIp = ip;
         mCountry = country;
     }
@@ -19,4 +21,5 @@ public class ServerListItemDataModel
     {
         return mCountry;
     }
+    public int get_id() { return mId; }
 }

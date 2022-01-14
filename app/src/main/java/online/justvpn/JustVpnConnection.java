@@ -49,7 +49,7 @@ public class JustVpnConnection implements Runnable
     private static final int MAX_HANDSHAKE_ATTEMPTS = 50;
     private final VpnService mService;
     private final int mConnectionId;
-    private final String mServerName;
+    private final String mServerAddress;
     private final int mServerPort;
 
     private PendingIntent mConfigureIntent;
@@ -62,12 +62,17 @@ public class JustVpnConnection implements Runnable
 
     private ConnectionState mConnectionState;
 
+    public String getServerIp()
+    {
+        return mServerAddress;
+    }
+
     public JustVpnConnection(final VpnService service, final int connectionId,
                             final String serverName, final int serverPort)
     {
         mService = service;
         mConnectionId = connectionId;
-        mServerName = serverName;
+        mServerAddress = serverName;
         mServerPort= serverPort;
         mConnectionState = ConnectionState.INIT;
     }
@@ -95,7 +100,7 @@ public class JustVpnConnection implements Runnable
         try
         {
             Log.i(getTag(), "Starting");
-            final SocketAddress serverAddress = new InetSocketAddress(mServerName, mServerPort);
+            final SocketAddress serverAddress = new InetSocketAddress(mServerAddress, mServerPort);
             run(serverAddress);
             notifyConnectionState();
         }
@@ -327,7 +332,7 @@ public class JustVpnConnection implements Runnable
         // Create a new interface using the builder and save the parameters.
         final ParcelFileDescriptor vpnInterface;
 
-        builder.setSession(mServerName).setConfigureIntent(mConfigureIntent);
+        builder.setSession(mServerAddress).setConfigureIntent(mConfigureIntent);
 
         synchronized (mService)
         {

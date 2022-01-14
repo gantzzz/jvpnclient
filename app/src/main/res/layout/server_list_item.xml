@@ -18,17 +18,19 @@
             android:id="@+id/imageViewCountryFlag"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            app:srcCompat="@android:drawable/ic_popup_sync" />
+            app:srcCompat="@android:drawable/ic_popup_sync"
+            android:layout_weight="1"/>
 
         <Space
-            android:layout_width="wrap_content"
+            android:layout_width="19dp"
             android:layout_height="wrap_content"
             android:layout_weight="1" />
 
         <TextView
-            android:id="@+id/textViewCountry"
-            android:layout_width="wrap_content"
+            android:id="@+id/textViewIP"
+            android:layout_width="70dp"
             android:layout_height="wrap_content"
+            android:layout_weight="1"
             android:text="TextView" />
 
         <Space
@@ -37,9 +39,10 @@
             android:layout_weight="1" />
 
         <TextView
-            android:id="@+id/textViewIP"
-            android:layout_width="wrap_content"
+            android:id="@+id/textViewCountry"
+            android:layout_width="20dp"
             android:layout_height="wrap_content"
+            android:layout_weight="1"
             android:text="TextView" />
 
         <Space
@@ -52,7 +55,11 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:clickable="false"
-            android:text="@string/connect" />
+            android:text="@string/connect"
+            android:layout_weight="1"
+            android:textColor="#0D5BE4"
+            android:thumbTint="#0444AF"
+            android:trackTint="#B60A0A" />
     </LinearLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>
