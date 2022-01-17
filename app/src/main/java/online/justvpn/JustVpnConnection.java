@@ -102,7 +102,6 @@ public class JustVpnConnection implements Runnable
             Log.i(getTag(), "Starting");
             final SocketAddress serverAddress = new InetSocketAddress(mServerAddress, mServerPort);
             run(serverAddress);
-            notifyConnectionState();
         }
         catch (IOException | InterruptedException | IllegalArgumentException e)
         {
@@ -245,7 +244,11 @@ public class JustVpnConnection implements Runnable
                     Log.e(getTag(), "Unable to close interface", e);
                 }
             }
-            mConnectionState = ConnectionState.FAILED;
+            if (mConnectionState != ConnectionState.DISCONNECTING &&
+                mConnectionState != ConnectionState.DISCONNECTED)
+            {
+                mConnectionState = ConnectionState.FAILED;
+            }
         }
     }
     @RequiresApi(api = Build.VERSION_CODES.Q)
