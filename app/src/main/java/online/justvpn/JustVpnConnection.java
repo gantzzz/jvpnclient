@@ -229,7 +229,7 @@ public class JustVpnConnection implements Runnable
         }
         catch (ClosedChannelException e)
         {
-            Log.e(getTag(), "Cannot connect to server", e);
+            Log.e(getTag(), "Connection closed", e);
         }
         finally
         {
@@ -264,24 +264,25 @@ public class JustVpnConnection implements Runnable
         // send disconnect control message to server
         ByteBuffer packet = ByteBuffer.allocate(1500);
 
-        // Control messages always start with zero.
-        String action = "action:connect";
-        packet.put((byte) 0).put(action.getBytes()).flip();
-        packet.position(0);
-        mTunnel.write(packet);
-        packet.clear();
-
-        // request parameters
-        action ="action:getparameters";
-        packet.put((byte) 0).put(action.getBytes()).flip();
-        packet.position(0);
-        mTunnel.write(packet);
-        packet.clear();
-
         // Wait for the parameters within a limited time.
         for (int i = 0; i < MAX_HANDSHAKE_ATTEMPTS; ++i)
         {
-            Thread.sleep(IDLE_INTERVAL_MS);
+            // Control messages always start with zero.
+            String action = "action:connect";
+            packet.put((byte) 0).put(action.getBytes()).flip();
+            packet.position(0);
+            mTunnel.write(packet);
+            packet.clear();
+
+            // request parameters
+            action ="action:getparameters";
+            packet.put((byte) 0).put(action.getBytes()).flip();
+            packet.position(0);
+            mTunnel.write(packet);
+            packet.clear();
+
+            Thread.sleep(TimeUnit.MILLISECONDS.toMillis(1000)); // give server time to response
+
             // Normally we should not receive random packets. Check that the first
             // byte is 0 as expected.
             int length = mTunnel.read(packet);
@@ -298,8 +299,11 @@ public class JustVpnConnection implements Runnable
                 mTunnel.write(packet);
                 packet.position(0);
                 packet.clear();
-
                 return descriptor;
+            }
+            else
+            {
+                Thread.sleep(IDLE_INTERVAL_MS); // next attempt
             }
         }
         mConnectionState = ConnectionState.TIMEDOUT;

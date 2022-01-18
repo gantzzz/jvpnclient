@@ -16,6 +16,11 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.widget.AdapterView;
 
+import com.android.billingclient.api.BillingClient;
+import com.android.billingclient.api.BillingClientStateListener;
+import com.android.billingclient.api.BillingResult;
+import com.android.billingclient.api.Purchase;
+import com.android.billingclient.api.PurchasesUpdatedListener;
 import com.android.volley.Request;
 import com.android.volley.RequestQueue;
 import com.android.volley.toolbox.StringRequest;
@@ -25,6 +30,8 @@ import org.json.JSONArray;
 import org.json.JSONException;
 
 import java.util.ArrayList;
+import java.util.List;
+
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
@@ -38,6 +45,15 @@ public class MainActivity extends AppCompatActivity
 {
     private ActivityMainBinding binding;
     private boolean mUserVpnAllowed = false;
+
+    private PurchasesUpdatedListener purchasesUpdatedListener = new PurchasesUpdatedListener() {
+        @Override
+        public void onPurchasesUpdated(BillingResult billingResult, List<Purchase> purchases) {
+            // To be implemented in a later section.
+        }
+    };
+
+    private BillingClient mBillingClient;
 
     private BroadcastReceiver mMessageReceiver = new BroadcastReceiver()
     {
@@ -129,6 +145,31 @@ public class MainActivity extends AppCompatActivity
         binding.serversListView.setOnItemClickListener(this::processServerItemSelected);
 
         LocalBroadcastManager.getInstance(this).registerReceiver(mMessageReceiver, new IntentFilter("JustVpnMsg"));
+
+        // Establish google play connection
+        mBillingClient = BillingClient.newBuilder(getApplicationContext())
+            .setListener(purchasesUpdatedListener)
+            .enablePendingPurchases()
+            .build();
+
+        mBillingClient.startConnection(new BillingClientStateListener() {
+            @Override
+            public void onBillingSetupFinished(BillingResult billingResult) {
+                if (billingResult.getResponseCode() ==  BillingClient.BillingResponseCode.OK)
+                {
+                    // The BillingClient is ready. You can query purchases here.
+                    int i = 0;
+                    i++;
+                }
+            }
+            @Override
+            public void onBillingServiceDisconnected() {
+                // Try to restart the connection on the next request to
+                // Google Play by calling the startConnection() method.
+                int i = 0;
+                i++;
+            }
+        });
     }
 
     @RequiresApi(api = Build.VERSION_CODES.O)
