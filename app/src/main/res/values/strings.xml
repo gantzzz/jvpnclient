@@ -19,4 +19,5 @@
     <string name="ok">ok</string>
     <string name="cancel">cancel</string>
     <string name="subscribe">This servers requires PRO subscription, would you like to subscribe?</string>
+    <string name="thanksforsubscribing">Thank you for becoming a subscriber!</string>
 </resources>

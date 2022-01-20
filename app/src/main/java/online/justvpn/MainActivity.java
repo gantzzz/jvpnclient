@@ -20,6 +20,8 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.widget.AdapterView;
 
+import com.android.billingclient.api.AcknowledgePurchaseParams;
+import com.android.billingclient.api.AcknowledgePurchaseResponseListener;
 import com.android.billingclient.api.BillingClient;
 import com.android.billingclient.api.BillingClientStateListener;
 import com.android.billingclient.api.BillingFlowParams;
@@ -48,6 +50,7 @@ import android.app.Activity;
 import android.net.VpnService;
 import android.widget.Switch;
 import android.widget.TextView;
+import android.widget.Toast;
 
 public class MainActivity extends AppCompatActivity implements SubscribeDialog.NoticeDialogListener
 {
@@ -72,7 +75,12 @@ public class MainActivity extends AppCompatActivity implements SubscribeDialog.N
             } else if (billingResult.getResponseCode() == BillingClient.BillingResponseCode.USER_CANCELED)
             {
                 // Handle an error caused by a user cancelling the purchase flow.
-            } else {
+            }
+            else if (billingResult.getResponseCode() == BillingClient.BillingResponseCode.ITEM_ALREADY_OWNED)
+            {
+                mProUser = true;
+            }
+            else {
                 // Handle any other error codes.
             }
         }
@@ -214,18 +222,21 @@ public class MainActivity extends AppCompatActivity implements SubscribeDialog.N
     {
         mBillingClient.queryPurchasesAsync(BillingClient.SkuType.SUBS, (billingResult, list) ->
         {
-            for (Purchase p : list)
+            if (billingResult.getResponseCode() == BillingClient.BillingResponseCode.OK)
             {
-                try {
-                    JSONObject purchase = new JSONObject(p.getOriginalJson());
-                    if (purchase.getString("productId").equals("pro"))
-                    {
-                        mProUser = true;
-                        break;
-                    }
-                } catch (JSONException e)
+                for (Purchase p : list)
                 {
-                    e.printStackTrace();
+                    try {
+                        JSONObject purchase = new JSONObject(p.getOriginalJson());
+                        if (purchase.getString("productId").equals("pro"))
+                        {
+                            mProUser = true;
+                            break;
+                        }
+                    } catch (JSONException e)
+                    {
+                        e.printStackTrace();
+                    }
                 }
             }
         });
@@ -240,6 +251,12 @@ public class MainActivity extends AppCompatActivity implements SubscribeDialog.N
         mBillingClient.querySkuDetailsAsync(params.build(),
                 (billingResult1, skuDetailsList) ->
                 {
+                    if (skuDetailsList == null)
+                    {
+                        Toast.makeText(getApplicationContext(), "You need to be signed up with google account in order to user JustVPN", Toast.LENGTH_LONG).show();
+                        mProUser = true; // TODO: TEMPORARELY ONLY !!!!!!!
+                        return;
+                    }
                     for (SkuDetails skDetail : skuDetailsList)
                     {
                         String title = skDetail.getTitle();
@@ -260,17 +277,23 @@ public class MainActivity extends AppCompatActivity implements SubscribeDialog.N
     {
         if (purchase.getPurchaseState() == Purchase.PurchaseState.PURCHASED)
         {
-            try
+            if (!purchase.isAcknowledged())
             {
-                JSONObject pur = new JSONObject(purchase.getOriginalJson());
-                if (pur.getString("productId").equals("pro"))
+                AcknowledgePurchaseParams acknowledgePurchaseParams =
+                        AcknowledgePurchaseParams.newBuilder()
+                                .setPurchaseToken(purchase.getPurchaseToken())
+                                .build();
+                mBillingClient.acknowledgePurchase(acknowledgePurchaseParams, billingResult ->
                 {
-                    mProUser = true;
-                }
-
-            } catch (JSONException e)
-            {
-                e.printStackTrace();
+                    if (billingResult.getResponseCode() == BillingClient.BillingResponseCode.OK)
+                    {
+                        runOnUiThread(() -> {
+                            Toast.makeText(getApplicationContext(),R.string.thanksforsubscribing, Toast.LENGTH_LONG).show();
+                            // Verify whether the subscription is active
+                            checkSubscription();
+                        });
+                    }
+                });
             }
         }
     }

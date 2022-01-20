@@ -180,7 +180,7 @@ public class JustVpnConnection implements Runnable
 
             // For simplicity, we use the same thread for both reading and
             // writing. Here we put the tunnel into non-blocking mode.
-            mTunnel.configureBlocking(false);
+            mTunnel.configureBlocking(true);
 
             // Authenticate and configure the virtual network interface.
             iface = handshake();
@@ -193,6 +193,43 @@ public class JustVpnConnection implements Runnable
             // Allocate the buffer for a single packet.
             ByteBuffer packet = ByteBuffer.allocate(MAX_PACKET_SIZE);
             // We keep forwarding packets till something goes wrong.
+
+            Thread thread = new Thread(() -> {
+                try
+                {
+                    ByteBuffer p = ByteBuffer.allocate(MAX_PACKET_SIZE);
+
+                    while (true)
+                    {
+                        // Read the incoming packet from the tunnel.
+                        int len = mTunnel.read(p);
+                        if (len > 0)
+                        {
+                            mLastPacketReceived = System.currentTimeMillis();
+                            // Ignore control messages, which start with zero.
+                            if (p.get(0) != 0)
+                            {
+                                // Write the incoming packet to the output stream.
+                                out.write(p.array(), 0, len);
+                            }
+                            else
+                            {
+                                ProcessControl(p, len);
+                            }
+                            p.clear();
+                        }
+                    }
+
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            });
+
+            thread.start();
+
+
+            // To minimize busy looping, sleep thread if data remains 0 for a few cycles
+            int nEmptyPacketCounter = 0;
             while (true)
             {
                 // Read the outgoing packet from the input stream.
@@ -203,23 +240,15 @@ public class JustVpnConnection implements Runnable
                     packet.limit(length);
                     mTunnel.write(packet);
                     packet.clear();
+                    nEmptyPacketCounter = 0;
                 }
-                // Read the incoming packet from the tunnel.
-                length = mTunnel.read(packet);
-                if (length > 0)
+                else
                 {
-                    mLastPacketReceived = System.currentTimeMillis();
-                    // Ignore control messages, which start with zero.
-                    if (packet.get(0) != 0)
+                    nEmptyPacketCounter++;
+                    if (nEmptyPacketCounter > 15)
                     {
-                        // Write the incoming packet to the output stream.
-                        out.write(packet.array(), 0, length);
+                        Thread.sleep(TimeUnit.MILLISECONDS.toMillis(100));
                     }
-                    else
-                    {
-                        ProcessControl(packet, length);
-                    }
-                    packet.clear();
                 }
             }
         }
@@ -280,8 +309,6 @@ public class JustVpnConnection implements Runnable
             packet.position(0);
             mTunnel.write(packet);
             packet.clear();
-
-            Thread.sleep(TimeUnit.MILLISECONDS.toMillis(1000)); // give server time to response
 
             // Normally we should not receive random packets. Check that the first
             // byte is 0 as expected.
