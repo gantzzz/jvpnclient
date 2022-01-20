@@ -1,12 +1,16 @@
 package online.justvpn;
 
+import android.app.AlertDialog;
+import android.app.Dialog;
 import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.Build;
 import android.os.Bundle;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AppCompatActivity;
 import android.view.View;
@@ -18,9 +22,14 @@ import android.widget.AdapterView;
 
 import com.android.billingclient.api.BillingClient;
 import com.android.billingclient.api.BillingClientStateListener;
+import com.android.billingclient.api.BillingFlowParams;
 import com.android.billingclient.api.BillingResult;
+import com.android.billingclient.api.ConsumeParams;
+import com.android.billingclient.api.ConsumeResponseListener;
 import com.android.billingclient.api.Purchase;
 import com.android.billingclient.api.PurchasesUpdatedListener;
+import com.android.billingclient.api.SkuDetails;
+import com.android.billingclient.api.SkuDetailsParams;
 import com.android.volley.Request;
 import com.android.volley.RequestQueue;
 import com.android.volley.toolbox.StringRequest;
@@ -28,32 +37,46 @@ import com.android.volley.toolbox.Volley;
 
 import org.json.JSONArray;
 import org.json.JSONException;
-
+import org.json.JSONObject;
 import java.util.ArrayList;
 import java.util.List;
-
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.fragment.app.DialogFragment;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
-
 import android.app.Activity;
 import android.net.VpnService;
 import android.widget.Switch;
 import android.widget.TextView;
 
-public class MainActivity extends AppCompatActivity
+public class MainActivity extends AppCompatActivity implements SubscribeDialog.NoticeDialogListener
 {
     private ActivityMainBinding binding;
     private boolean mUserVpnAllowed = false;
+    public Activity mActivity;
+    private boolean mBillingActive = false;
+    private boolean mProUser = false;
+    private BillingClient mBillingClient;
 
     private PurchasesUpdatedListener purchasesUpdatedListener = new PurchasesUpdatedListener() {
         @Override
-        public void onPurchasesUpdated(BillingResult billingResult, List<Purchase> purchases) {
-            // To be implemented in a later section.
+        public void onPurchasesUpdated(BillingResult billingResult, List<Purchase> purchases)
+        {
+            if (billingResult.getResponseCode() == BillingClient.BillingResponseCode.OK
+                    && purchases != null)
+            {
+                for (Purchase purchase : purchases)
+                {
+                    handlePurchase(purchase);
+                }
+            } else if (billingResult.getResponseCode() == BillingClient.BillingResponseCode.USER_CANCELED)
+            {
+                // Handle an error caused by a user cancelling the purchase flow.
+            } else {
+                // Handle any other error codes.
+            }
         }
     };
-
-    private BillingClient mBillingClient;
 
     private BroadcastReceiver mMessageReceiver = new BroadcastReceiver()
     {
@@ -100,6 +123,21 @@ public class MainActivity extends AppCompatActivity
         }
     };
 
+    @Override
+    public void onDialogPositiveClick(DialogFragment dialog)
+    {
+        // User touched the dialog's ok button
+        subscribe();
+    }
+
+    @Override
+    public void onDialogNegativeClick(DialogFragment dialog)
+    {
+        // User touched the dialog's negative button
+        int i = 0;
+        i++;
+    }
+
     private void requestVpnServicePermissionDialog()
     {
         // Ask for vpn service permission
@@ -127,6 +165,7 @@ public class MainActivity extends AppCompatActivity
     @Override
     protected void onCreate(Bundle savedInstanceState)
     {
+        mActivity = this;
         super.onCreate(savedInstanceState);
 
         binding = ActivityMainBinding.inflate(getLayoutInflater());
@@ -152,24 +191,88 @@ public class MainActivity extends AppCompatActivity
             .enablePendingPurchases()
             .build();
 
-        mBillingClient.startConnection(new BillingClientStateListener() {
+        mBillingClient.startConnection(new BillingClientStateListener()
+        {
             @Override
-            public void onBillingSetupFinished(BillingResult billingResult) {
+            public void onBillingSetupFinished(BillingResult billingResult)
+            {
                 if (billingResult.getResponseCode() ==  BillingClient.BillingResponseCode.OK)
                 {
-                    // The BillingClient is ready. You can query purchases here.
-                    int i = 0;
-                    i++;
+                    // See if user has been subscribed
+                    checkSubscription();
                 }
             }
             @Override
-            public void onBillingServiceDisconnected() {
-                // Try to restart the connection on the next request to
-                // Google Play by calling the startConnection() method.
-                int i = 0;
-                i++;
+            public void onBillingServiceDisconnected()
+            {
+                mBillingActive = false;
             }
         });
+    }
+
+    void checkSubscription()
+    {
+        mBillingClient.queryPurchasesAsync(BillingClient.SkuType.SUBS, (billingResult, list) ->
+        {
+            for (Purchase p : list)
+            {
+                try {
+                    JSONObject purchase = new JSONObject(p.getOriginalJson());
+                    if (purchase.getString("productId").equals("pro"))
+                    {
+                        mProUser = true;
+                        break;
+                    }
+                } catch (JSONException e)
+                {
+                    e.printStackTrace();
+                }
+            }
+        });
+    }
+
+    void subscribe()
+    {
+        List<String> skuList = new ArrayList<> ();
+        skuList.add("pro");
+        SkuDetailsParams.Builder params = SkuDetailsParams.newBuilder();
+        params.setSkusList(skuList).setType(BillingClient.SkuType.SUBS);
+        mBillingClient.querySkuDetailsAsync(params.build(),
+                (billingResult1, skuDetailsList) ->
+                {
+                    for (SkuDetails skDetail : skuDetailsList)
+                    {
+                        String title = skDetail.getTitle();
+                        if (title.contains("pro"))
+                        {
+                            // Process the result.
+                            BillingFlowParams billingFlowParams = BillingFlowParams.newBuilder()
+                                    .setSkuDetails(skuDetailsList.get(0))
+                                    .build();
+                            int responseCode = mBillingClient.launchBillingFlow(mActivity, billingFlowParams).getResponseCode();
+                            break;
+                        }
+                    }
+                });
+    }
+
+    void handlePurchase(Purchase purchase)
+    {
+        if (purchase.getPurchaseState() == Purchase.PurchaseState.PURCHASED)
+        {
+            try
+            {
+                JSONObject pur = new JSONObject(purchase.getOriginalJson());
+                if (pur.getString("productId").equals("pro"))
+                {
+                    mProUser = true;
+                }
+
+            } catch (JSONException e)
+            {
+                e.printStackTrace();
+            }
+        }
     }
 
     @RequiresApi(api = Build.VERSION_CODES.O)
@@ -210,11 +313,22 @@ public class MainActivity extends AppCompatActivity
         // connect
         else
         {
-            selected.setChecked(true);
-            ServerListItemDataModel model = (ServerListItemDataModel)adapterView.getItemAtPosition(i);
-
-            service.putExtra("ip", model.get_ip());
-            startForegroundService(service.setAction(JustVpnService.ACTION_CONNECT));
+            if (true) // TODO: is PRO server
+            {
+                if (!mProUser)
+                {
+                    SubscribeDialog dialog = new SubscribeDialog();
+                    dialog.show(getSupportFragmentManager(), "");
+                }
+                else
+                {
+                    // Start connection
+                    selected.setChecked(true);
+                    ServerListItemDataModel model = (ServerListItemDataModel)adapterView.getItemAtPosition(i);
+                    service.putExtra("ip", model.get_ip());
+                    startForegroundService(service.setAction(JustVpnService.ACTION_CONNECT));
+                }
+            }
         }
     }
 

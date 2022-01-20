@@ -16,4 +16,7 @@
     <string name="port">port</string>
     <string name="servers">servers available</string>
     <string name="connect">connect</string>
+    <string name="ok">ok</string>
+    <string name="cancel">cancel</string>
+    <string name="subscribe">This servers requires PRO subscription, would you like to subscribe?</string>
 </resources>
