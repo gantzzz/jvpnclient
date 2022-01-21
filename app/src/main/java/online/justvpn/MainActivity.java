@@ -253,7 +253,7 @@ public class MainActivity extends AppCompatActivity implements SubscribeDialog.N
                 {
                     if (skuDetailsList == null)
                     {
-                        Toast.makeText(getApplicationContext(), "You need to be signed up with google account in order to user JustVPN", Toast.LENGTH_LONG).show();
+                        Toast.makeText(getApplicationContext(), R.string.needaccount, Toast.LENGTH_LONG).show();
                         mProUser = true; // TODO: TEMPORARELY ONLY !!!!!!!
                         return;
                     }
@@ -370,14 +370,24 @@ public class MainActivity extends AppCompatActivity implements SubscribeDialog.N
                         JSONArray jArray = new JSONArray(response);
                         for (int i = 0; i < jArray.length(); i++)
                         {
-                            JSONArray serverArr = jArray.getJSONArray(i);
-                            int id = Integer.valueOf(serverArr.get(0).toString());
-                            String ip = serverArr.get(1).toString();
-                            String country = serverArr.get(2).toString();
-                            dataModels.add(new ServerListItemDataModel(id, ip, country));
+                            JSONObject jObject = jArray.getJSONObject(i);
+
+                            if (jObject.has("id") &&
+                                jObject.has("ip") &&
+                                jObject.has("country") && jObject.has("active"))
+                            {
+                                if (jObject.getBoolean("active")) // Only advertise servers that are active
+                                {
+                                    int id = Integer.valueOf(jObject.get("id").toString());
+                                    String ip = jObject.get("ip").toString();
+                                    String country = jObject.get("country").toString();
+                                    dataModels.add(new ServerListItemDataModel(id, ip, country));
+                                }
+                            }
                         }
 
                         binding.serversListView.setAdapter(new ServerListItemAdaptor(getApplicationContext(), dataModels));
+                        binding.pullToRefresh.setRefreshing(false);
 
                         // If user refreshes the servers list while already connected, update switch
                         // by asking the service to send active connection data
@@ -386,15 +396,14 @@ public class MainActivity extends AppCompatActivity implements SubscribeDialog.N
                     {
                         e.printStackTrace();
                     }
-                }, error -> {
-                    // TODO: Show messagebox
+                }, error ->
+                {
+                    runOnUiThread(() -> Toast.makeText(getApplicationContext(), R.string.getserverserror, Toast.LENGTH_LONG).show());
                 }
         );
 
         // Add the request to the RequestQueue.
         queue.add(stringRequest);
-
-        binding.pullToRefresh.setRefreshing(false);
     }
 
     private void updateActiveConnection()

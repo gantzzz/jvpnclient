@@ -20,4 +20,6 @@
     <string name="cancel">cancel</string>
     <string name="subscribe">This servers requires PRO subscription, would you like to subscribe?</string>
     <string name="thanksforsubscribing">Thank you for becoming a subscriber!</string>
+    <string name="needaccount">You need to be signed in with google account in order to be able to user JustVPN service.</string>
+    <string name="getserverserror">Unable to download servers list. Please retry later.</string>
 </resources>
