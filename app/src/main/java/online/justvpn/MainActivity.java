@@ -48,6 +48,7 @@ import androidx.fragment.app.DialogFragment;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 import android.app.Activity;
 import android.net.VpnService;
+import android.widget.ImageView;
 import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -359,10 +360,10 @@ public class MainActivity extends AppCompatActivity implements SubscribeDialog.N
     {
         // Download servers list
         RequestQueue queue = Volley.newRequestQueue(this);
-        String url = "http://justvpn.online/api/getservers";
+        String getServers = "http://justvpn.online/api/getservers";
 
         // Request a string response from the provided URL.
-        StringRequest stringRequest = new StringRequest(Request.Method.GET, url,
+        StringRequest stringRequest = new StringRequest(Request.Method.GET, getServers,
                 response ->
                 {
                     ArrayList<ServerListItemDataModel> dataModels = new ArrayList<>();
@@ -381,7 +382,64 @@ public class MainActivity extends AppCompatActivity implements SubscribeDialog.N
                                     int id = Integer.valueOf(jObject.get("id").toString());
                                     String ip = jObject.get("ip").toString();
                                     String country = jObject.get("country").toString();
-                                    dataModels.add(new ServerListItemDataModel(id, ip, country));
+                                    ServerListItemDataModel dataModel = new ServerListItemDataModel(id, ip, country, Sig.UNKNOWN);
+                                    dataModels.add(dataModel);
+
+                                    // request signal for this server
+                                    String serverId = jObject.get("id").toString();
+                                    String getConnections = "http://justvpn.online/api/connections?serverid=" + serverId;
+                                    StringRequest signalRequest = new StringRequest(Request.Method.GET, getConnections,
+                                            resp ->
+                                            {
+                                                try
+                                                {
+                                                    JSONObject jObjectSig = new JSONObject(resp);
+                                                    if (jObjectSig.has("connections"))
+                                                    {
+                                                        ServerListItemDataModel m = null;
+                                                        for (int z = 0; z < binding.serversListView.getAdapter().getCount(); z++)
+                                                        {
+                                                            ServerListItemDataModel tmpModel = (ServerListItemDataModel) binding.serversListView.getAdapter().getItem(z);
+
+                                                            if (tmpModel.get_id() == Integer.parseInt(serverId))
+                                                            {
+                                                                m = tmpModel;
+                                                            }
+                                                        }
+
+                                                        if (m != null)
+                                                        {
+                                                            int connections = jObjectSig.getInt("connections");
+                                                            if (connections >= 75)
+                                                            {
+                                                                m.set_signal(Sig.LOW);
+                                                            }
+                                                            else if (connections >= 50)
+                                                            {
+                                                                m.set_signal(Sig.MID);
+                                                            }
+                                                            else if (connections >= 25)
+                                                            {
+                                                                m.set_signal(Sig.GOOD);
+                                                            }
+                                                            else if (connections >= 0)
+                                                            {
+                                                                m.set_signal(Sig.BEST);
+                                                            }
+
+                                                            runOnUiThread(() -> binding.serversListView.invalidateViews());
+
+                                                        }
+                                                    }
+                                                } catch (JSONException e) {
+                                                    e.printStackTrace();
+                                                }
+                                            }
+                                            , error ->
+                                            {
+                                                // not handled
+                                            });
+                                    queue.add(signalRequest);
                                 }
                             }
                         }
@@ -399,6 +457,7 @@ public class MainActivity extends AppCompatActivity implements SubscribeDialog.N
                 }, error ->
                 {
                     runOnUiThread(() -> Toast.makeText(getApplicationContext(), R.string.getserverserror, Toast.LENGTH_LONG).show());
+                    binding.pullToRefresh.setRefreshing(false);
                 }
         );
 

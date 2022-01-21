@@ -22,7 +22,7 @@
             android:layout_weight="1"/>
 
         <Space
-            android:layout_width="19dp"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_weight="1" />
 
@@ -32,6 +32,18 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="TextView" />
+
+        <Space
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_weight="1" />
+
+        <ImageView
+            android:id="@+id/imageViewSignal"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            app:srcCompat="@android:drawable/ic_popup_sync"
+            android:layout_weight="1"/>
 
         <Space
             android:layout_width="wrap_content"

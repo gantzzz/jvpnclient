@@ -26,6 +26,7 @@ public class ServerListItemAdaptor extends ArrayAdapter<ServerListItemDataModel>
         TextView ip;
         TextView countryName;
         Switch enableSwitch;
+        ImageView sig;
     }
 
     public ServerListItemAdaptor(@NonNull Context context, ArrayList<ServerListItemDataModel> Data)
@@ -64,6 +65,7 @@ public class ServerListItemAdaptor extends ArrayAdapter<ServerListItemDataModel>
             viewHolder.ip = convertView.findViewById(R.id.textViewIP);
             viewHolder.countryName = convertView.findViewById(R.id.textViewCountry);
             viewHolder.enableSwitch = convertView.findViewById(R.id.enableSwitch);
+            viewHolder.sig = convertView.findViewById(R.id.imageViewSignal);
             convertView.setTag(viewHolder);
         }
         else
@@ -71,6 +73,40 @@ public class ServerListItemAdaptor extends ArrayAdapter<ServerListItemDataModel>
             viewHolder = (ViewHolder) convertView.getTag();
         }
 
+        setCountryIcon(model, viewHolder);
+        viewHolder.ip.setText(model.get_ip());
+        viewHolder.countryName.setText(model.get_country());
+        setSignalIcon(model, viewHolder);
+
+        return convertView;
+    }
+
+    void setSignalIcon(ServerListItemDataModel model, ViewHolder viewHolder)
+    {
+        switch (model.get_signal())
+        {
+            case BEST:
+                viewHolder.sig.setImageResource(R.mipmap.sig_best);
+                break;
+            case GOOD:
+                viewHolder.sig.setImageResource(R.mipmap.sig_good);
+                break;
+            case MID:
+                viewHolder.sig.setImageResource(R.mipmap.sig_mid);
+                break;
+            case LOW:
+                viewHolder.sig.setImageResource(R.mipmap.sig_low);
+                break;
+            case UNKNOWN:
+                viewHolder.sig.setImageResource(R.mipmap.sig_unknown);
+                break;
+            default:
+                break;
+        }
+    }
+
+    void setCountryIcon(ServerListItemDataModel model, ViewHolder viewHolder)
+    {
         switch (model.get_country())
         {
             case "NL":
@@ -85,9 +121,5 @@ public class ServerListItemAdaptor extends ArrayAdapter<ServerListItemDataModel>
             default:
                 break;
         }
-        viewHolder.ip.setText(model.get_ip());
-        viewHolder.countryName.setText(model.get_country());
-
-        return convertView;
     }
 }

@@ -245,6 +245,7 @@ public class JustVpnService extends VpnService implements Handler.Callback {
         mHandler.sendEmptyMessage(R.string.disconnected);
         setConnectingThread(null);
         setConnection(null);
+        mJustVpnConnection = null;
         stopForeground(true);
     }
     @RequiresApi(api = Build.VERSION_CODES.O)
