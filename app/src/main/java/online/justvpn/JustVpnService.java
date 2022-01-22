@@ -189,6 +189,10 @@ public class JustVpnService extends VpnService implements Handler.Callback {
                     // once connected, monitor the connection health
                     startConnectionMonitor();
                     break;
+                case NOSLOTS:
+                    disconnect();
+                    sendMessageToActivity("noslots");
+                    break;
 
                 case FAILED:
                 case TIMEDOUT:

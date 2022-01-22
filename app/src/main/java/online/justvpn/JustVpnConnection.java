@@ -31,6 +31,7 @@ public class JustVpnConnection implements Runnable
         DISCONNECTED,
         TIMEDOUT,
         FAILED,
+        NOSLOTS,
         RECONNECTING
     }
     /**
@@ -303,6 +304,22 @@ public class JustVpnConnection implements Runnable
             mTunnel.write(packet);
             packet.clear();
 
+            int length = mTunnel.read(packet);
+            if (length > 0 && packet.get(0) == 0)
+            {
+                // see if server accepts the connection
+                String s = new String(packet.array());
+                if (!s.contains("action:connected"))
+                {
+                    if (s.contains("reason:noslots"))
+                    {
+                        mConnectionState = ConnectionState.NOSLOTS;
+                        throw new IOException("No slots");
+                    }
+                }
+            }
+            packet.clear();
+
             // request parameters
             action ="action:getparameters";
             packet.put((byte) 0).put(action.getBytes()).flip();
@@ -310,9 +327,11 @@ public class JustVpnConnection implements Runnable
             mTunnel.write(packet);
             packet.clear();
 
+            String s = new String(packet.array());
+
             // Normally we should not receive random packets. Check that the first
             // byte is 0 as expected.
-            int length = mTunnel.read(packet);
+            length = mTunnel.read(packet);
             if (length > 0 && packet.get(0) == 0)
             {
                 ParcelFileDescriptor descriptor = configure(new String(packet.array(), 1, length - 1, US_ASCII).trim());

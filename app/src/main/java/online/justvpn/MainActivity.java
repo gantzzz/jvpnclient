@@ -111,6 +111,10 @@ public class MainActivity extends AppCompatActivity implements SubscribeDialog.N
                     toDisable.setChecked(false);
                 }
             }
+            else if (status.contains("noslots"))
+            {
+                Toast.makeText(getApplicationContext(), R.string.noslots, Toast.LENGTH_LONG).show();
+            }
             else if (status.contains("connected"))
             {
                 // service notified about active connection, update switch -> enabled
