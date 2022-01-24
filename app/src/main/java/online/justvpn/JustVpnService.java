@@ -3,12 +3,10 @@ package online.justvpn;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
-import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.content.SharedPreferences;
 import android.net.VpnService;
 import android.os.Build;
 import android.os.Handler;
@@ -16,22 +14,18 @@ import android.os.Message;
 import android.os.ParcelFileDescriptor;
 import android.util.Log;
 import android.util.Pair;
-import android.view.View;
-import android.widget.Switch;
-import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.RequiresApi;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import java.io.IOException;
-import java.util.Collections;
-import java.util.Set;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+
 public class JustVpnService extends VpnService implements Handler.Callback {
     private static final String TAG = JustVpnService.class.getSimpleName();
     public static final String ACTION_CONNECT = "online.justvpn.START";
@@ -118,6 +112,10 @@ public class JustVpnService extends VpnService implements Handler.Callback {
         if (intent != null)
         {
             mServer = intent.getStringExtra("ip");
+        }
+        else
+        {
+            return START_STICKY;
         }
 
         switch (intent.getAction())

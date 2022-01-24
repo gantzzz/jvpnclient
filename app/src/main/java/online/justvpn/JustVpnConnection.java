@@ -20,8 +20,11 @@ import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.DatagramChannel;
 import java.util.concurrent.TimeUnit;
+
 public class JustVpnConnection implements Runnable
 {
+    private Thread mReceiverThread = null;
+
     public enum ConnectionState
     {
         INIT,
@@ -31,8 +34,7 @@ public class JustVpnConnection implements Runnable
         DISCONNECTED,
         TIMEDOUT,
         FAILED,
-        NOSLOTS,
-        RECONNECTING
+        NOSLOTS
     }
     /**
      * Callback interface to let the {@link JustVpnService} know about new connections
@@ -53,7 +55,6 @@ public class JustVpnConnection implements Runnable
     private final String mServerAddress;
     private final int mServerPort;
 
-    private PendingIntent mConfigureIntent;
     private OnConnectionStateListener mConnectionStateListener;
 
     private DatagramChannel mTunnel;
@@ -78,9 +79,6 @@ public class JustVpnConnection implements Runnable
         mConnectionState = ConnectionState.INIT;
     }
 
-    public void setConfigureIntent(PendingIntent intent) {
-        mConfigureIntent = intent;
-    }
     public void setOnConnectionStateListener(OnConnectionStateListener listener)
     {
         mConnectionStateListener = listener;
@@ -131,6 +129,11 @@ public class JustVpnConnection implements Runnable
     public void Disconnect()
     {
         mConnectionState = ConnectionState.DISCONNECTING;
+        if (mReceiverThread != null)
+        {
+            mReceiverThread.interrupt();
+        }
+
         Thread thread = new Thread(() -> {
             try  {
                 // send disconnect control message to server
@@ -195,7 +198,7 @@ public class JustVpnConnection implements Runnable
             ByteBuffer packet = ByteBuffer.allocate(MAX_PACKET_SIZE);
             // We keep forwarding packets till something goes wrong.
 
-            Thread thread = new Thread(() -> {
+            mReceiverThread = new Thread(() -> {
                 try
                 {
                     ByteBuffer p = ByteBuffer.allocate(MAX_PACKET_SIZE);
@@ -226,7 +229,7 @@ public class JustVpnConnection implements Runnable
                 }
             });
 
-            thread.start();
+            mReceiverThread.start();
 
 
             // To minimize busy looping, sleep thread if data remains 0 for a few cycles
@@ -314,8 +317,12 @@ public class JustVpnConnection implements Runnable
                     if (s.contains("reason:noslots"))
                     {
                         mConnectionState = ConnectionState.NOSLOTS;
-                        throw new IOException("No slots");
                     }
+                    else
+                    {
+                        mConnectionState = ConnectionState.FAILED;
+                    }
+                    throw new IOException("failed to connect");
                 }
             }
             packet.clear();
@@ -326,8 +333,6 @@ public class JustVpnConnection implements Runnable
             packet.position(0);
             mTunnel.write(packet);
             packet.clear();
-
-            String s = new String(packet.array());
 
             // Normally we should not receive random packets. Check that the first
             // byte is 0 as expected.
@@ -384,8 +389,6 @@ public class JustVpnConnection implements Runnable
         }
         // Create a new interface using the builder and save the parameters.
         final ParcelFileDescriptor vpnInterface;
-
-        builder.setSession(mServerAddress).setConfigureIntent(mConfigureIntent);
 
         synchronized (mService)
         {
