@@ -322,12 +322,9 @@ public class JustVpnConnection implements Runnable
                     if (s.contains("reason:noslots"))
                     {
                         mConnectionState = ConnectionState.NOSLOTS;
+                        throw new IOException("No slots");
                     }
-                    else
-                    {
-                        mConnectionState = ConnectionState.FAILED;
-                    }
-                    throw new IOException("failed to connect");
+                    continue;
                 }
             }
             packet.clear();
@@ -370,9 +367,20 @@ public class JustVpnConnection implements Runnable
     {
         // Configure a builder while parsing the parameters.
         VpnService.Builder builder = mService.new Builder();
-        for (String parameter : parameters.split(";")) {
+        for (String parameter : parameters.split(";"))
+        {
+            if (!(parameters.contains("mtu") &&
+                parameters.contains("address") &&
+                parameters.contains("route") &&
+                parameters.contains("dns")))
+            {
+                mConnectionState = ConnectionState.FAILED;
+                throw new IllegalArgumentException("Bad parameters: " + parameters);
+            }
+
             String[] fields = parameter.split(":");
-            try {
+            try
+            {
                 switch (fields[0]) {
                     case "mtu":
                         builder.setMtu(Short.parseShort(fields[1]));
