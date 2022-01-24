@@ -129,37 +129,42 @@ public class JustVpnConnection implements Runnable
     public void Disconnect()
     {
         mConnectionState = ConnectionState.DISCONNECTING;
-        if (mReceiverThread != null)
-        {
-            mReceiverThread.interrupt();
-        }
 
-        Thread thread = new Thread(() -> {
-            try  {
+        Thread thread = new Thread(() ->
+        {
+            try
+            {
                 // send disconnect control message to server
                 ByteBuffer packet = ByteBuffer.allocate(1024);
                 // Control messages always start with zero.
                 String action = "action:disconnect";
                 packet.put((byte) 0).put(action.getBytes()).flip();
-                // Send the secret several times in case of packet loss.
-                for (int i = 0; i < 3; ++i)
-                {
-                    packet.position(0);
-                    mTunnel.write(packet);
-                }
+                packet.position(0);
+                mTunnel.write(packet);
                 packet.clear();
                 mConnectionState = ConnectionState.DISCONNECTED;
-            } catch (Exception e) {
+            }
+            catch (Exception e)
+            {
                 e.printStackTrace();
             }
         });
 
         thread.start();
-        try {
+        try
+        {
             thread.join();
-        } catch (InterruptedException e) {
+        }
+        catch (InterruptedException e)
+        {
             e.printStackTrace();
         }
+        // wait read and write threads to finish
+        if (mReceiverThread != null)
+        {
+            mReceiverThread.interrupt();
+        }
+        //notifyConnectionState();
     }
     @RequiresApi(api = Build.VERSION_CODES.Q)
     private void run(SocketAddress server)
@@ -198,12 +203,13 @@ public class JustVpnConnection implements Runnable
             ByteBuffer packet = ByteBuffer.allocate(MAX_PACKET_SIZE);
             // We keep forwarding packets till something goes wrong.
 
-            mReceiverThread = new Thread(() -> {
+            mReceiverThread = new Thread(() ->
+            {
                 try
                 {
                     ByteBuffer p = ByteBuffer.allocate(MAX_PACKET_SIZE);
 
-                    while (true)
+                    while (mConnectionState != ConnectionState.DISCONNECTING)
                     {
                         // Read the incoming packet from the tunnel.
                         int len = mTunnel.read(p);
@@ -231,10 +237,9 @@ public class JustVpnConnection implements Runnable
 
             mReceiverThread.start();
 
-
             // To minimize busy looping, sleep thread if data remains 0 for a few cycles
             int nEmptyPacketCounter = 0;
-            while (true)
+            while (mConnectionState != ConnectionState.DISCONNECTING)
             {
                 // Read the outgoing packet from the input stream.
                 int length = in.read(packet.array());

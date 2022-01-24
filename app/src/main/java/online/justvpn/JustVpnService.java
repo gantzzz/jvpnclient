@@ -30,7 +30,6 @@ public class JustVpnService extends VpnService implements Handler.Callback {
     private static final String TAG = JustVpnService.class.getSimpleName();
     public static final String ACTION_CONNECT = "online.justvpn.START";
     public static final String ACTION_DISCONNECT = "online.justvpn.STOP";
-    public static final String ACTION_GETCONNECTION = "online.justvpn.GETCONNECTION";
     private Handler mHandler;
     private Timer mConnectionCheckTimer = null;
     private long CONNECTION_CHECK_PERIOD =  TimeUnit.SECONDS.toMillis(10);
@@ -244,6 +243,7 @@ public class JustVpnService extends VpnService implements Handler.Callback {
         {
             mJustVpnConnection.Disconnect();
         }
+
         mHandler.sendEmptyMessage(R.string.disconnected);
         setConnectingThread(null);
         setConnection(null);
