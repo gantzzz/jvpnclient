@@ -23,15 +23,31 @@
     <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
         android:id="@+id/pullToRefresh"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="400dp"
         android:layout_marginTop="60dp"
         android:layout_marginBottom="80dp">
 
         <ListView
             android:id="@+id/serversListView"
             android:layout_width="match_parent"
-            android:layout_height="match_parent" />
+            android:layout_height="100dp">
+
+        </ListView>
 
     </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="216dp"
+        android:layout_gravity="bottom">
+
+        <TextView
+            android:id="@+id/infoTextView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="start"
+            android:textAlignment="viewStart"
+            android:textDirection="firstStrongRtl" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

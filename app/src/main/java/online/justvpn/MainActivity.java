@@ -34,6 +34,7 @@ import com.android.billingclient.api.SkuDetails;
 import com.android.billingclient.api.SkuDetailsParams;
 import com.android.volley.Request;
 import com.android.volley.RequestQueue;
+import com.android.volley.Response;
 import com.android.volley.toolbox.StringRequest;
 import com.android.volley.toolbox.Volley;
 
@@ -42,6 +43,10 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Timer;
+import java.util.TimerTask;
+import java.util.concurrent.TimeUnit;
+
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.fragment.app.DialogFragment;
@@ -61,6 +66,7 @@ public class MainActivity extends AppCompatActivity implements SubscribeDialog.N
     private boolean mBillingActive = false;
     private boolean mProUser = false;
     private BillingClient mBillingClient;
+    private Timer mUpdateInfoTimer;
 
     private PurchasesUpdatedListener purchasesUpdatedListener = new PurchasesUpdatedListener() {
         @Override
@@ -187,7 +193,11 @@ public class MainActivity extends AppCompatActivity implements SubscribeDialog.N
         setSupportActionBar(binding.toolbar);
 
         // update servers list
-        binding.pullToRefresh.setOnRefreshListener(this::getServersAvailable);
+        binding.pullToRefresh.setOnRefreshListener(() ->
+        {
+            getServersAvailable();
+            updateInfo();
+        });
 
         binding.pullToRefresh.setRefreshing(true);
         getServersAvailable();
@@ -221,6 +231,53 @@ public class MainActivity extends AppCompatActivity implements SubscribeDialog.N
                 mBillingActive = false;
             }
         });
+
+        mUpdateInfoTimer = new Timer();
+        mUpdateInfoTimer.schedule(new TimerTask()
+        {
+            @RequiresApi(api = Build.VERSION_CODES.O)
+            @Override
+            public void run()
+            {
+                updateInfo();
+            }
+        }, TimeUnit.SECONDS.toMillis(60), TimeUnit.SECONDS.toMillis(60));
+        updateInfo();
+    }
+
+    void updateInfo()
+    {
+        RequestQueue queue = Volley.newRequestQueue(getApplicationContext());
+        String get_info = "http://justvpn.online/api/info";
+        StringRequest signalRequest = new StringRequest(Request.Method.GET, get_info,
+                resp ->
+                {
+                    try
+                    {
+                        JSONArray jArray = new JSONArray(resp);
+                        TextView tv = findViewById(R.id.infoTextView);
+                        tv.setText("");
+                        for (int i = 0; i < jArray.length(); i++)
+                        {
+                            JSONObject jsonObject = jArray.getJSONObject(i);
+                            if (jsonObject.has("id") && jsonObject.has("text"))
+                            {
+                                String text = jsonObject.getString("text");
+                                tv.append("* " + text + "\n");
+                                tv.append("\n");
+                            }
+                        }
+                    }
+                    catch (JSONException e)
+                    {
+                        e.printStackTrace();
+                    }
+                }
+                , error ->
+        {
+            // not handled
+        });
+        queue.add(signalRequest);
     }
 
     void checkSubscription()
