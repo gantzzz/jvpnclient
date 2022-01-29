@@ -63,10 +63,11 @@ public class MainActivity extends AppCompatActivity implements SubscribeDialog.N
     private ActivityMainBinding binding;
     private boolean mUserVpnAllowed = false;
     public Activity mActivity;
-    private boolean mBillingActive = false;
     private boolean mProUser = false;
     private BillingClient mBillingClient;
     private Timer mUpdateInfoTimer;
+    private boolean mBillingActive = false;
+    private String mSubscriptionToken = "";
 
     private PurchasesUpdatedListener purchasesUpdatedListener = new PurchasesUpdatedListener() {
         @Override
@@ -85,7 +86,10 @@ public class MainActivity extends AppCompatActivity implements SubscribeDialog.N
             }
             else if (billingResult.getResponseCode() == BillingClient.BillingResponseCode.ITEM_ALREADY_OWNED)
             {
-                mProUser = true;
+                for (Purchase purchase : purchases)
+                {
+                    handlePurchase(purchase);
+                }
             }
             else {
                 // Handle any other error codes.
@@ -222,6 +226,7 @@ public class MainActivity extends AppCompatActivity implements SubscribeDialog.N
                 if (billingResult.getResponseCode() ==  BillingClient.BillingResponseCode.OK)
                 {
                     // See if user has been subscribed
+                    mBillingActive = true;
                     checkSubscription();
                 }
             }
@@ -293,6 +298,7 @@ public class MainActivity extends AppCompatActivity implements SubscribeDialog.N
                         if (purchase.getString("productId").equals("pro"))
                         {
                             mProUser = true;
+                            mSubscriptionToken = purchase.getString("purchaseToken");
                             break;
                         }
                     } catch (JSONException e)
@@ -316,7 +322,6 @@ public class MainActivity extends AppCompatActivity implements SubscribeDialog.N
                     if (skuDetailsList == null)
                     {
                         Toast.makeText(getApplicationContext(), R.string.needaccount, Toast.LENGTH_LONG).show();
-                        mProUser = true; // TODO: TEMPORARELY ONLY !!!!!!!
                         return;
                     }
                     for (SkuDetails skDetail : skuDetailsList)
@@ -349,7 +354,8 @@ public class MainActivity extends AppCompatActivity implements SubscribeDialog.N
                 {
                     if (billingResult.getResponseCode() == BillingClient.BillingResponseCode.OK)
                     {
-                        runOnUiThread(() -> {
+                        runOnUiThread(() ->
+                        {
                             Toast.makeText(getApplicationContext(),R.string.thanksforsubscribing, Toast.LENGTH_LONG).show();
                             // Verify whether the subscription is active
                             checkSubscription();
@@ -372,6 +378,7 @@ public class MainActivity extends AppCompatActivity implements SubscribeDialog.N
         Switch selected = view.findViewById(R.id.enableSwitch);
 
         Intent service = new Intent(getApplicationContext(), JustVpnService.class);
+        service.putExtra("subscriptionToken", mSubscriptionToken);
 
         // Uncheck all but selected
         for (int b = 0; b < binding.serversListView.getChildCount(); b++)

@@ -45,6 +45,7 @@ public class JustVpnService extends VpnService implements Handler.Callback {
     private AtomicInteger mNextConnectionId = new AtomicInteger(1);
     private JustVpnConnection mJustVpnConnection;
     private String mServer;
+    private String mPurchaseToken;
 
     private BroadcastReceiver mMessageReceiver = new BroadcastReceiver()
     {
@@ -111,6 +112,7 @@ public class JustVpnService extends VpnService implements Handler.Callback {
         if (intent != null)
         {
             mServer = intent.getStringExtra("ip");
+            mPurchaseToken = intent.getStringExtra("subscriptionToken");
         }
         else
         {
@@ -166,7 +168,7 @@ public class JustVpnService extends VpnService implements Handler.Callback {
             mHandler.sendEmptyMessage(R.string.connecting);
         }
 
-        startConnection(new JustVpnConnection(this, mNextConnectionId.getAndIncrement(), mServer, 8811));
+        startConnection(new JustVpnConnection(this, mNextConnectionId.getAndIncrement(), mServer, 8811, mPurchaseToken));
     }
     private void startConnection(final JustVpnConnection connection)
     {

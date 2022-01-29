@@ -61,6 +61,7 @@ public class JustVpnConnection implements Runnable
 
     public long mLastPacketReceived;
     public boolean mConnected = false;
+    private String mSubscriptionToken;
 
     private ConnectionState mConnectionState;
 
@@ -70,13 +71,14 @@ public class JustVpnConnection implements Runnable
     }
 
     public JustVpnConnection(final VpnService service, final int connectionId,
-                            final String serverName, final int serverPort)
+                            final String serverName, final int serverPort, final String subscriptionToken)
     {
         mService = service;
         mConnectionId = connectionId;
         mServerAddress = serverName;
         mServerPort= serverPort;
         mConnectionState = ConnectionState.INIT;
+        mSubscriptionToken = subscriptionToken;
     }
 
     public void setOnConnectionStateListener(OnConnectionStateListener listener)
@@ -352,6 +354,17 @@ public class JustVpnConnection implements Runnable
                 mTunnel.write(packet);
                 packet.position(0);
                 packet.clear();
+
+                // verify subscription on server side
+                packet.position(0);
+                packet.clear();
+                action ="action:verifysubscription;token=" + mSubscriptionToken;
+                packet.put((byte) 0).put(action.getBytes()).flip();
+                packet.position(0);
+                mTunnel.write(packet);
+                packet.position(0);
+                packet.clear();
+
                 return descriptor;
             }
             else
