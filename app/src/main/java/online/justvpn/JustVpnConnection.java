@@ -47,7 +47,7 @@ public class JustVpnConnection implements Runnable
     /** Maximum packet size is constrained by the MTU, which is given as a signed short. */
     private static final int MAX_PACKET_SIZE = Short.MAX_VALUE;
 
-    private static final long IDLE_INTERVAL_MS = TimeUnit.MILLISECONDS.toMillis(100);
+    private static final long IDLE_INTERVAL_MS = TimeUnit.MILLISECONDS.toMillis(200);
 
     private static final int MAX_HANDSHAKE_ATTEMPTS = 50;
     private final VpnService mService;
@@ -191,10 +191,11 @@ public class JustVpnConnection implements Runnable
 
             // For simplicity, we use the same thread for both reading and
             // writing. Here we put the tunnel into non-blocking mode.
-            mTunnel.configureBlocking(true);
+            mTunnel.configureBlocking(false);
 
             // Authenticate and configure the virtual network interface.
             iface = handshake();
+            mTunnel.configureBlocking(true);
             // Now we are connected. Set the flag.
             mConnected = true;
             // Packets to be sent are queued in this input stream.
