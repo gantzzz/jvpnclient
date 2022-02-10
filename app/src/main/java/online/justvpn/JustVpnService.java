@@ -187,6 +187,8 @@ public class JustVpnService extends VpnService implements Handler.Callback {
                     setConnection(new Connection(thread, vpnInterface));
                     // once connected, monitor the connection health
                     startConnectionMonitor();
+
+                    sendMessageToActivity("connected:" + mJustVpnConnection.getServerIp());
                     break;
                 case NOSLOTS:
                     disconnect();

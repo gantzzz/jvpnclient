@@ -7,6 +7,7 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.SharedPreferences;
 import android.os.Build;
 import android.os.Bundle;
 
@@ -68,6 +69,7 @@ public class MainActivity extends AppCompatActivity implements SubscribeDialog.N
     private Timer mUpdateInfoTimer;
     private boolean mBillingActive = false;
     private String mSubscriptionToken = "";
+    private int mPendingHttpRequests = 0;
 
     private PurchasesUpdatedListener purchasesUpdatedListener = new PurchasesUpdatedListener() {
         @Override
@@ -140,6 +142,16 @@ public class MainActivity extends AppCompatActivity implements SubscribeDialog.N
                     {
                         Switch toEnable = child.findViewById(R.id.enableSwitch);
                         toEnable.setChecked(true);
+
+                        // save last connected server to settings
+                        SharedPreferences settings = getSharedPreferences("preferences", 0);
+                        boolean rememberserver = settings.getBoolean("rememberserver", false);
+                        if (rememberserver)
+                        {
+                            SharedPreferences.Editor editor = settings.edit();
+                            editor.putString("lastConnectedServer", ip);
+                            editor.commit();
+                        }
                     }
                 }
             }
@@ -199,12 +211,12 @@ public class MainActivity extends AppCompatActivity implements SubscribeDialog.N
         // update servers list
         binding.pullToRefresh.setOnRefreshListener(() ->
         {
-            getServersAvailable();
+            getServersAvailable(false);
             updateInfo();
         });
 
         binding.pullToRefresh.setRefreshing(true);
-        getServersAvailable();
+        getServersAvailable(true);
 
         requestVpnServicePermissionDialog();
 
@@ -277,12 +289,15 @@ public class MainActivity extends AppCompatActivity implements SubscribeDialog.N
                     {
                         e.printStackTrace();
                     }
+                    mPendingHttpRequests--;
                 }
                 , error ->
-        {
-            // not handled
-        });
-        queue.add(signalRequest);
+                {
+                    mPendingHttpRequests--;
+                    // not handled
+                });
+                queue.add(signalRequest);
+                mPendingHttpRequests++;
     }
 
     void checkSubscription()
@@ -377,9 +392,6 @@ public class MainActivity extends AppCompatActivity implements SubscribeDialog.N
 
         Switch selected = view.findViewById(R.id.enableSwitch);
 
-        Intent service = new Intent(getApplicationContext(), JustVpnService.class);
-        service.putExtra("subscriptionToken", mSubscriptionToken);
-
         // Uncheck all but selected
         for (int b = 0; b < binding.serversListView.getChildCount(); b++)
         {
@@ -390,7 +402,7 @@ public class MainActivity extends AppCompatActivity implements SubscribeDialog.N
                 // disconnect any previous connection
                 if (toDisable.isChecked())
                 {
-                    startForegroundService(service.setAction(JustVpnService.ACTION_DISCONNECT));
+                    startJustVpnServiceWithAction(JustVpnService.ACTION_DISCONNECT, "");
                 }
                 toDisable.setChecked(false);
             }
@@ -400,7 +412,7 @@ public class MainActivity extends AppCompatActivity implements SubscribeDialog.N
         if (selected.isChecked())
         {
             selected.setChecked(false);
-            startForegroundService(service.setAction(JustVpnService.ACTION_DISCONNECT));
+            startJustVpnServiceWithAction(JustVpnService.ACTION_DISCONNECT, "");
         }
         // connect
         else
@@ -417,14 +429,72 @@ public class MainActivity extends AppCompatActivity implements SubscribeDialog.N
                     // Start connection
                     selected.setChecked(true);
                     ServerListItemDataModel model = (ServerListItemDataModel)adapterView.getItemAtPosition(i);
-                    service.putExtra("ip", model.get_ip());
-                    startForegroundService(service.setAction(JustVpnService.ACTION_CONNECT));
+                    startJustVpnServiceWithAction(JustVpnService.ACTION_CONNECT, model.get_ip());
                 }
             }
         }
     }
 
-    private void getServersAvailable()
+    @RequiresApi(api = Build.VERSION_CODES.O)
+    private void startJustVpnServiceWithAction(String sAction, String sServerAddress)
+    {
+        Intent service = new Intent(getApplicationContext(), JustVpnService.class);
+        service.putExtra("subscriptionToken", mSubscriptionToken);
+
+        if (sAction.equals(JustVpnService.ACTION_CONNECT))
+        {
+            service.putExtra("ip", sServerAddress);
+        }
+        startForegroundService(service.setAction(sAction));
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.O)
+    private void applyUserSettings()
+    {
+        SharedPreferences settings = getSharedPreferences("preferences", 0);
+        boolean autoconnect = settings.getBoolean("autoconnect", false);
+
+        // User hasn't set autoconnect, nothing to do
+        if (!autoconnect)
+        {
+            return;
+        }
+
+        boolean rememberserver = settings.getBoolean("rememberserver", false);
+
+        String sServer = "";
+
+        if (rememberserver)
+        {
+            sServer = settings.getString("lastConnectedServer", "");
+        }
+        else // Select server automatically depending on signal
+        {
+            ServerListItemDataModel model = new ServerListItemDataModel(0, "", "", Sig.UNKNOWN);
+            for (int i = 0; i < binding.serversListView.getChildCount(); i++)
+            {
+                View child = binding.serversListView.getChildAt(i);
+                ServerListItemDataModel tmpModel = (ServerListItemDataModel) binding.serversListView.getAdapter().getItem(i);
+                if (tmpModel.get_signal().ordinal() < model.get_signal().ordinal())
+                {
+                    model = tmpModel;
+                }
+            }
+            // Now we've found best server by signal, connect to it
+            if (!model.get_signal().equals(Sig.UNKNOWN))
+            {
+                sServer = model.get_ip();
+            }
+        }
+
+        if (!sServer.isEmpty())
+        {
+            startJustVpnServiceWithAction(JustVpnService.ACTION_CONNECT, sServer);
+        }
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.O)
+    private void getServersAvailable(Boolean bApplyUserSettings)
     {
         // Download servers list
         RequestQueue queue = Volley.newRequestQueue(this);
@@ -453,7 +523,7 @@ public class MainActivity extends AppCompatActivity implements SubscribeDialog.N
                                     ServerListItemDataModel dataModel = new ServerListItemDataModel(id, ip, country, Sig.UNKNOWN);
                                     dataModels.add(dataModel);
 
-                                    // request signal for this server
+                                    // request number of connections for each server to calculate signal for each server
                                     String serverId = jObject.get("id").toString();
                                     String getConnections = "http://justvpn.online/api/connections?serverid=" + serverId;
                                     StringRequest signalRequest = new StringRequest(Request.Method.GET, getConnections,
@@ -494,20 +564,21 @@ public class MainActivity extends AppCompatActivity implements SubscribeDialog.N
                                                             {
                                                                 m.set_signal(Sig.BEST);
                                                             }
-
-                                                            runOnUiThread(() -> binding.serversListView.invalidateViews());
-
                                                         }
                                                     }
-                                                } catch (JSONException e) {
+                                                } catch (JSONException e)
+                                                {
                                                     e.printStackTrace();
                                                 }
+                                                mPendingHttpRequests--;
                                             }
                                             , error ->
                                             {
                                                 // not handled
+                                                mPendingHttpRequests--;
                                             });
                                     queue.add(signalRequest);
+                                    mPendingHttpRequests++;
                                 }
                             }
                         }
@@ -522,8 +593,10 @@ public class MainActivity extends AppCompatActivity implements SubscribeDialog.N
                     {
                         e.printStackTrace();
                     }
+                    mPendingHttpRequests--;
                 }, error ->
                 {
+                    mPendingHttpRequests--;
                     runOnUiThread(() -> Toast.makeText(getApplicationContext(), R.string.getserverserror, Toast.LENGTH_LONG).show());
                     binding.pullToRefresh.setRefreshing(false);
                 }
@@ -531,6 +604,19 @@ public class MainActivity extends AppCompatActivity implements SubscribeDialog.N
 
         // Add the request to the RequestQueue.
         queue.add(stringRequest);
+        mPendingHttpRequests++;
+        queue.addRequestEventListener((request, event) ->
+        {
+            if (mPendingHttpRequests == 0)
+            {
+                runOnUiThread(() -> binding.serversListView.invalidateViews());
+                // Now that we have all the servers updated, apply user preferences
+                if (bApplyUserSettings)
+                {
+                    applyUserSettings();
+                }
+            }
+        });
     }
 
     private void updateActiveConnection()
