@@ -8,12 +8,15 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AppCompatActivity;
+
+import android.provider.Settings;
 import android.view.View;
 
 import online.justvpn.databinding.ActivityMainBinding;
@@ -314,6 +317,13 @@ public class MainActivity extends AppCompatActivity implements SubscribeDialog.N
                         {
                             mProUser = true;
                             mSubscriptionToken = purchase.getString("purchaseToken");
+
+                            // save to settings
+                            SharedPreferences settings = getSharedPreferences("preferences", 0);
+                            SharedPreferences.Editor editor = settings.edit();
+                            editor.putString("subscriptiontoken", mSubscriptionToken);
+                            editor.commit();
+
                             break;
                         }
                     } catch (JSONException e)

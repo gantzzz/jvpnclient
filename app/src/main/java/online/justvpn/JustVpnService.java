@@ -26,13 +26,15 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
-public class JustVpnService extends VpnService implements Handler.Callback {
+public class JustVpnService extends VpnService implements Handler.Callback
+{
     private static final String TAG = JustVpnService.class.getSimpleName();
     public static final String ACTION_CONNECT = "online.justvpn.START";
     public static final String ACTION_DISCONNECT = "online.justvpn.STOP";
     private Handler mHandler;
     private Timer mConnectionCheckTimer = null;
     private long CONNECTION_CHECK_PERIOD =  TimeUnit.SECONDS.toMillis(10);
+
     private static class Connection extends Pair<Thread, ParcelFileDescriptor>
     {
         public Connection(Thread thread, ParcelFileDescriptor pfd)
@@ -54,11 +56,15 @@ public class JustVpnService extends VpnService implements Handler.Callback {
         {
             // Get extra data included in the Intent
             String message = intent.getStringExtra("request");
-            if (message != null && message.equals("getconnection"))
+            String sAction = intent.getAction();
+            if (sAction.equals("JustVpnMsg"))
             {
-                if (mJustVpnConnection != null)
+                if (message != null && message.equals("getconnection"))
                 {
-                    sendMessageToActivity("connected:" + mJustVpnConnection.getServerIp());
+                    if (mJustVpnConnection != null)
+                    {
+                        sendMessageToActivity("connected:" + mJustVpnConnection.getServerIp());
+                    }
                 }
             }
         }
