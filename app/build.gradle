@@ -7,10 +7,10 @@ android {
 
     defaultConfig {
         applicationId "online.justvpn"
-        minSdk 25
+        minSdk 21
         targetSdk 31
-        versionCode 17
-        versionName "17"
+        versionCode 20
+        versionName "20"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }

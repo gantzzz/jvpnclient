@@ -3,6 +3,7 @@ package online.justvpn;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -49,7 +50,7 @@ public class JustVpnService extends VpnService implements Handler.Callback
     private String mServer;
     private String mPurchaseToken;
 
-    private BroadcastReceiver mMessageReceiver = new BroadcastReceiver()
+    private class MyBroadcastReceiver extends BroadcastReceiver
     {
         @Override
         public void onReceive(Context context, Intent intent)
@@ -70,6 +71,8 @@ public class JustVpnService extends VpnService implements Handler.Callback
         }
     };
 
+    private MyBroadcastReceiver mBroadcastReceiver = new MyBroadcastReceiver();
+
     @Override
     public void onCreate()
     {
@@ -79,7 +82,7 @@ public class JustVpnService extends VpnService implements Handler.Callback
             mHandler = new Handler(this);
         }
 
-        LocalBroadcastManager.getInstance(this).registerReceiver(mMessageReceiver, new IntentFilter("JustVpnMsg"));
+        LocalBroadcastManager.getInstance(this).registerReceiver(mBroadcastReceiver, new IntentFilter("JustVpnMsg"));
     }
 
     private void startConnectionMonitor()
@@ -115,12 +118,7 @@ public class JustVpnService extends VpnService implements Handler.Callback
     @Override
     public int onStartCommand(Intent intent, int flags, int startId)
     {
-        if (intent != null)
-        {
-            mServer = intent.getStringExtra("ip");
-            mPurchaseToken = intent.getStringExtra("subscriptionToken");
-        }
-        else
+        if (intent == null)
         {
             return START_STICKY;
         }
@@ -133,6 +131,20 @@ public class JustVpnService extends VpnService implements Handler.Callback
 
 
             case ACTION_CONNECT:
+                // Don't overwrite mServer and mPurchaseToken if the intent
+                // does not have this extras to support re-connection
+                // from notification bar
+                String server = intent.getStringExtra("ip");
+                if (server != null)
+                {
+                    mServer = server;
+                }
+                String purchaseToken = intent.getStringExtra("subscriptionToken");
+                if (purchaseToken != null)
+                {
+                    mPurchaseToken = purchaseToken;
+                }
+
                 // Timer is restarted once connection is established
                 if (mConnectionCheckTimer != null)
                 {
@@ -147,6 +159,7 @@ public class JustVpnService extends VpnService implements Handler.Callback
                 return START_NOT_STICKY;
         }
     }
+    @RequiresApi(api = Build.VERSION_CODES.O)
     @Override
     public void onDestroy()
     {
@@ -176,6 +189,7 @@ public class JustVpnService extends VpnService implements Handler.Callback
 
         startConnection(new JustVpnConnection(this, mNextConnectionId.getAndIncrement(), mServer, 8811, mPurchaseToken));
     }
+    @RequiresApi(api = Build.VERSION_CODES.O)
     private void startConnection(final JustVpnConnection connection)
     {
         mJustVpnConnection = connection;
@@ -210,6 +224,8 @@ public class JustVpnService extends VpnService implements Handler.Callback
                         sendMessageToActivity("failed");
                     }
                     break;
+                case DISCONNECTED:
+                    sendMessageToActivity("disconnected");
             }
         });
 
@@ -241,6 +257,7 @@ public class JustVpnService extends VpnService implements Handler.Callback
             }
         }
     }
+    @RequiresApi(api = Build.VERSION_CODES.O)
     private void disconnect()
     {
         if (mConnectionCheckTimer != null)
@@ -258,7 +275,8 @@ public class JustVpnService extends VpnService implements Handler.Callback
         setConnectingThread(null);
         setConnection(null);
         mJustVpnConnection = null;
-        stopForeground(true);
+        stopForeground(false);
+        updateForegroundNotification(R.string.disconnected);
     }
     @RequiresApi(api = Build.VERSION_CODES.O)
     private void updateForegroundNotification(final int message)
@@ -271,9 +289,25 @@ public class JustVpnService extends VpnService implements Handler.Callback
                 NOTIFICATION_CHANNEL_ID, NOTIFICATION_CHANNEL_ID,
                 NotificationManager.IMPORTANCE_DEFAULT));
 
+        Intent actionIntent = new Intent(this, JustVpnService.class);
+        String actionText;
+        if (mJustVpnConnection != null && mJustVpnConnection.mConnected)
+        {
+            actionIntent.setAction(ACTION_DISCONNECT);
+            actionText = "disconnect";
+        }
+        else
+        {
+            actionIntent.setAction(ACTION_CONNECT);
+            actionText = "connect";
+        }
+
+        PendingIntent snoozePendingIntent = PendingIntent.getService(this, 0, actionIntent, PendingIntent.FLAG_IMMUTABLE);
+
         startForeground(1, new Notification.Builder(this, NOTIFICATION_CHANNEL_ID)
                 .setSmallIcon(R.drawable.vpn_icon)
                 .setContentText(getString(message))
+                .addAction(R.drawable.vpn_icon, actionText, snoozePendingIntent)
                 .build());
     }
 

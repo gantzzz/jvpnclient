@@ -166,7 +166,7 @@ public class JustVpnConnection implements Runnable
         {
             mReceiverThread.interrupt();
         }
-        //notifyConnectionState();
+        notifyConnectionState();
     }
     @RequiresApi(api = Build.VERSION_CODES.Q)
     private void run(SocketAddress server)

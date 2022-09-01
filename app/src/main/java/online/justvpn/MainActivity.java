@@ -130,6 +130,16 @@ public class MainActivity extends AppCompatActivity implements SubscribeDialog.N
             {
                 Toast.makeText(getApplicationContext(), R.string.noslots, Toast.LENGTH_LONG).show();
             }
+            else if (status.contains("disconnected"))
+            {
+                // Uncheck all
+                for (int b = 0; b < binding.serversListView.getChildCount(); b++)
+                {
+                    View child = binding.serversListView.getChildAt(b);
+                    Switch toDisable = child.findViewById(R.id.enableSwitch);
+                    toDisable.setChecked(false);
+                }
+            }
             else if (status.contains("connected"))
             {
                 // service notified about active connection, update switch -> enabled
