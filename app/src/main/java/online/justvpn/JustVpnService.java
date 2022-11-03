@@ -34,7 +34,12 @@ public class JustVpnService extends VpnService implements Handler.Callback
     public static final String ACTION_DISCONNECT = "online.justvpn.STOP";
     private Handler mHandler;
     private Timer mConnectionCheckTimer = null;
-    private long CONNECTION_CHECK_PERIOD =  TimeUnit.SECONDS.toMillis(10);
+    /*
+    Server will send keepalive every 15 seconds per connection and will repeat 3 times before
+    the connection will be dropped on the server side. So there is no need to check whether
+    connection is stuck more often than once per 60 seconds (15 x 3 = 45 + some delta to give last chance)
+     */
+    private final long CONNECTION_CHECK_PERIOD =  TimeUnit.SECONDS.toMillis(60);
 
     private static class Connection extends Pair<Thread, ParcelFileDescriptor>
     {
@@ -45,7 +50,7 @@ public class JustVpnService extends VpnService implements Handler.Callback
     }
     private final AtomicReference<Thread> mConnectingThread = new AtomicReference<>();
     private final AtomicReference<Connection> mConnection = new AtomicReference<>();
-    private AtomicInteger mNextConnectionId = new AtomicInteger(1);
+    private final AtomicInteger mNextConnectionId = new AtomicInteger(1);
     private JustVpnConnection mJustVpnConnection;
     private String mServer;
     private String mPurchaseToken;
@@ -69,9 +74,9 @@ public class JustVpnService extends VpnService implements Handler.Callback
                 }
             }
         }
-    };
+    }
 
-    private MyBroadcastReceiver mBroadcastReceiver = new MyBroadcastReceiver();
+    private final MyBroadcastReceiver mBroadcastReceiver = new MyBroadcastReceiver();
 
     @Override
     public void onCreate()
@@ -102,7 +107,11 @@ public class JustVpnService extends VpnService implements Handler.Callback
 
                 if (mJustVpnConnection != null)
                 {
-                    if (mJustVpnConnection.mLastPacketReceived + 5000 <= currentTime)
+                    /* if delta time between the current time and last packet was received is more than
+                    45 seconds (every 15 seconds keepalive is sent by the server for 3 times before
+                    the server disconnects the client), reconnect the connection
+                    */
+                    if ((currentTime - mJustVpnConnection.mLastPacketReceived) > 45000)
                     {
                         // we haven't received anything for awhile, reconnect
                         setConnectingThread(null);
@@ -226,6 +235,11 @@ public class JustVpnService extends VpnService implements Handler.Callback
                     break;
                 case DISCONNECTED:
                     sendMessageToActivity("disconnected");
+                    break;
+                case NOTSUBSCRIBED:
+                    sendMessageToActivity("notsubscribed");
+                    break;
+
             }
         });
 
@@ -268,7 +282,7 @@ public class JustVpnService extends VpnService implements Handler.Callback
 
         if (mJustVpnConnection != null)
         {
-            mJustVpnConnection.Disconnect();
+            mJustVpnConnection.Disconnect(JustVpnConnection.ConnectionState.DISCONNECTING);
         }
 
         mHandler.sendEmptyMessage(R.string.disconnected);
@@ -289,6 +303,7 @@ public class JustVpnService extends VpnService implements Handler.Callback
                 NOTIFICATION_CHANNEL_ID, NOTIFICATION_CHANNEL_ID,
                 NotificationManager.IMPORTANCE_DEFAULT));
 
+        // support connect/disconnect from the notification bar
         Intent actionIntent = new Intent(this, JustVpnService.class);
         String actionText;
         if (mJustVpnConnection != null && mJustVpnConnection.mConnected)
@@ -302,12 +317,12 @@ public class JustVpnService extends VpnService implements Handler.Callback
             actionText = "connect";
         }
 
-        PendingIntent snoozePendingIntent = PendingIntent.getService(this, 0, actionIntent, PendingIntent.FLAG_IMMUTABLE);
+        PendingIntent actionPendingIntent = PendingIntent.getService(this, 0, actionIntent, PendingIntent.FLAG_IMMUTABLE);
 
         startForeground(1, new Notification.Builder(this, NOTIFICATION_CHANNEL_ID)
                 .setSmallIcon(R.drawable.vpn_icon)
                 .setContentText(getString(message))
-                .addAction(R.drawable.vpn_icon, actionText, snoozePendingIntent)
+                .addAction(R.drawable.vpn_icon, actionText, actionPendingIntent)
                 .build());
     }
 

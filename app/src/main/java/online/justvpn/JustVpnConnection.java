@@ -34,7 +34,8 @@ public class JustVpnConnection implements Runnable
         DISCONNECTED,
         TIMEDOUT,
         FAILED,
-        NOSLOTS
+        NOSLOTS,
+        NOTSUBSCRIBED
     }
     /**
      * Callback interface to let the {@link JustVpnService} know about new connections
@@ -127,40 +128,56 @@ public class JustVpnConnection implements Runnable
             mTunnel.write(p);
             p.clear();
         }
-    }
-    public void Disconnect()
-    {
-        mConnectionState = ConnectionState.DISCONNECTING;
-
-        Thread thread = new Thread(() ->
+        else if (s.contains("action:notsubscribed"))
         {
+            // server has indicated that the subscription token did not work, disconnect and report to ui
+            Disconnect(ConnectionState.NOTSUBSCRIBED);
+        }
+    }
+    public void Disconnect(ConnectionState state)
+    {
+        mConnectionState = state;
+
+        if (mConnectionState == ConnectionState.NOTSUBSCRIBED || // client subscription validation failed
+            mConnectionState == ConnectionState.NOSLOTS) // server can't receive new connections
+        {
+            /* these states indicate that the server has already disconnected the client.
+            No need to send anything to the server anymore.
+             */
+        }
+        else
+        {
+            Thread thread = new Thread(() ->
+            {
+                try
+                {
+                    // send disconnect control message to server
+                    ByteBuffer packet = ByteBuffer.allocate(1024);
+                    // Control messages always start with zero.
+                    String action = "action:disconnect";
+                    packet.put((byte) 0).put(action.getBytes()).flip();
+                    packet.position(0);
+                    mTunnel.write(packet);
+                    packet.clear();
+                    mConnectionState = ConnectionState.DISCONNECTED;
+                }
+                catch (Exception e)
+                {
+                    e.printStackTrace();
+                }
+            });
+
+            thread.start();
             try
             {
-                // send disconnect control message to server
-                ByteBuffer packet = ByteBuffer.allocate(1024);
-                // Control messages always start with zero.
-                String action = "action:disconnect";
-                packet.put((byte) 0).put(action.getBytes()).flip();
-                packet.position(0);
-                mTunnel.write(packet);
-                packet.clear();
-                mConnectionState = ConnectionState.DISCONNECTED;
+                thread.join();
             }
-            catch (Exception e)
+            catch (InterruptedException e)
             {
                 e.printStackTrace();
             }
-        });
+        }
 
-        thread.start();
-        try
-        {
-            thread.join();
-        }
-        catch (InterruptedException e)
-        {
-            e.printStackTrace();
-        }
         // wait read and write threads to finish
         if (mReceiverThread != null)
         {
@@ -191,7 +208,7 @@ public class JustVpnConnection implements Runnable
 
             // For simplicity, we use the same thread for both reading and
             // writing. Here we put the tunnel into non-blocking mode.
-            mTunnel.configureBlocking(false);
+            //mTunnel.configureBlocking(false);
 
             // Authenticate and configure the virtual network interface.
             iface = handshake();

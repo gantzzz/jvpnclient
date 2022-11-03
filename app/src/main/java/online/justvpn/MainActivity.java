@@ -102,6 +102,18 @@ public class MainActivity extends AppCompatActivity implements SubscribeDialog.N
         }
     };
 
+    private void UncheckAllSwitches()
+    {
+        // Uncheck all
+        for (int b = 0; b < binding.serversListView.getChildCount(); b++)
+        {
+            View child = binding.serversListView.getChildAt(b);
+            Switch toDisable = child.findViewById(R.id.enableSwitch);
+            toDisable.setChecked(false);
+        }
+    }
+
+    // receive message from the service
     private BroadcastReceiver mMessageReceiver = new BroadcastReceiver()
     {
         @Override
@@ -129,16 +141,11 @@ public class MainActivity extends AppCompatActivity implements SubscribeDialog.N
             else if (status.contains("noslots"))
             {
                 Toast.makeText(getApplicationContext(), R.string.noslots, Toast.LENGTH_LONG).show();
+                UncheckAllSwitches();
             }
             else if (status.contains("disconnected"))
             {
-                // Uncheck all
-                for (int b = 0; b < binding.serversListView.getChildCount(); b++)
-                {
-                    View child = binding.serversListView.getChildAt(b);
-                    Switch toDisable = child.findViewById(R.id.enableSwitch);
-                    toDisable.setChecked(false);
-                }
+                UncheckAllSwitches();
             }
             else if (status.contains("connected"))
             {
@@ -167,6 +174,11 @@ public class MainActivity extends AppCompatActivity implements SubscribeDialog.N
                         }
                     }
                 }
+            }
+            else if(status.contains("notsubscribed"))
+            {
+                UncheckAllSwitches();
+                Toast.makeText(getApplicationContext(), R.string.notsubscribed, Toast.LENGTH_LONG).show();
             }
         }
     };

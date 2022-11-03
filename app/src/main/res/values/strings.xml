@@ -18,5 +18,7 @@
     <string name="rememberlastserver">Remember last server</string>
     <string name="autoconnect">Connect automatically when application starts</string>
     <string name="autostart">Start the app when phone boots</string>
+    <string name="notsubscribed">Sorry this user\'s subscription is not valid</string>
+
 
 </resources>
